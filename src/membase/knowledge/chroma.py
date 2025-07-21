@@ -276,6 +276,12 @@ class ChromaKnowledgeBase(KnowledgeBase):
             "include": ["documents", "metadatas", "distances"],
             **kwargs
         }
+        if query == "":
+            query_params = {
+                "n_results": top_k,
+                "include": ["documents", "metadatas", "distances"],
+                **kwargs
+            }
         
         # Add metadata filter if provided
         if metadata_filter:

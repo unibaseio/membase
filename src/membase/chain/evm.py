@@ -22,12 +22,7 @@ logger = logging.getLogger(__name__)
 
 # RPC endpoints for different chains
 BSC_TESTNET_RPC = [
-    "https://data-seed-prebsc-1-s1.binance.org:8545",
-    "https://data-seed-prebsc-1-s2.binance.org:8545",
-    "https://data-seed-prebsc-1-s3.binance.org:8545",
-    "https://data-seed-prebsc-2-s1.binance.org:8545",
-    "https://data-seed-prebsc-2-s2.binance.org:8545",
-    "https://data-seed-prebsc-2-s3.binance.org:8545",
+    "https://bsc-prebsc-dataseed.bnbchain.org"
     "https://bsc-testnet.drpc.org",
     "https://bsc-testnet.public.blastapi.io",
     "https://bsc-testnet-rpc.publicnode.com",
@@ -35,10 +30,20 @@ BSC_TESTNET_RPC = [
 ]
 
 BSC_MAINNET_RPC = [
-    "https://bsc-dataseed1.binance.org",
+    "https://bsc-dataseed1.ninicoin.io",
+    "https://bsc-dataseed2.ninicoin.io",
+    "https://bsc-dataseed3.ninicoin.io",
+    "https://bsc-dataseed4.ninicoin.io",
     "https://bsc-dataseed2.binance.org",
+    "https://bsc-dataseed1.binance.org",
     "https://bsc-dataseed3.binance.org",
-    "https://bsc-dataseed4.binance.org"
+    "https://bsc-dataseed4.binance.org",
+    "https://bsc.meowrpc.com",
+    "https://bsc-pokt.nodies.app",
+    "https://bsc-dataseed1.defibit.io",
+    "https://bsc-dataseed2.defibit.io",
+    "https://bsc-dataseed3.defibit.io",
+    "https://bsc-dataseed4.defibit.io",
 ]
     
 ETH_MAINNET_RPC = []
