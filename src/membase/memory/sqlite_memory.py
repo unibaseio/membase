@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SqliteMemoryStorage: 使用sqlite3持久化存储memory
+SqliteMemory: 使用sqlite3持久化存储memory
 """
 import os
 import sqlite3
@@ -8,7 +8,6 @@ import json
 from typing import Optional, Union, Sequence, Callable, List
 import uuid
 from .message import Message
-from .memory import MemoryBase
 from .serialize import serialize
 from membase.knowledge.chroma import ChromaKnowledgeBase
 from membase.knowledge.document import Document
@@ -16,7 +15,7 @@ from membase.storage.hub import hub_client
 
 import logging
 
-class SqliteMemory(MemoryBase):
+class SqliteMemory:
     def __init__(self, conversation_id: Optional[str], membase_account: str = "default", auto_upload_to_hub: bool = False, knowledge_base=None):
         if not conversation_id:
             self.conversation_id = str(uuid.uuid4())
@@ -30,7 +29,7 @@ class SqliteMemory(MemoryBase):
             self.knowledge_base = knowledge_base
         else:
             self.knowledge_base = ChromaKnowledgeBase(
-                persist_directory=f"~/.membase/{membase_account}/memory_rag",
+                persist_directory=f"~/.membase/{membase_account}/rag",
                 collection_name=membase_account + "_memory",
                 membase_account=membase_account
             )
@@ -39,8 +38,31 @@ class SqliteMemory(MemoryBase):
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
+        # 创建stm表
         c.execute('''
-            CREATE TABLE IF NOT EXISTS memories (
+            CREATE TABLE IF NOT EXISTS memories_stm (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT,
+                content TEXT,
+                memory_index INTEGER,
+                upload_status INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # 创建ltm表
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS memories_ltm (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT,
+                content TEXT,
+                memory_index INTEGER,
+                upload_status INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        # 创建profile表
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS memories_profile (
                 id TEXT PRIMARY KEY,
                 conversation_id TEXT,
                 content TEXT,
@@ -69,13 +91,20 @@ class SqliteMemory(MemoryBase):
                 msg_dict["metadata"]["conversation"] = self.conversation_id
             else:
                 msg_dict["metadata"] = {"conversation": self.conversation_id}
+            # 选择表名
+            if msg.type == "ltm":
+                table = "memories_ltm"
+            elif msg.type == "profile":
+                table = "memories_profile"
+            else:
+                table = "memories_stm"
             # 获取当前memory_index
-            c.execute('SELECT MAX(memory_index) FROM memories WHERE conversation_id = ?', (self.conversation_id,))
+            c.execute(f'SELECT MAX(memory_index) FROM {table} WHERE conversation_id = ?', (self.conversation_id,))
             row = c.fetchone()
             memory_index = (row[0] + 1) if row[0] is not None else 0
-            # 插入sqlite（主键约束自动去重）
-            c.execute('''
-                INSERT OR REPLACE INTO memories (id, conversation_id, content, memory_index, upload_status) VALUES (?, ?, ?, ?, 0)
+            # 插入sqlite
+            c.execute(f'''
+                INSERT OR REPLACE INTO {table} (id, conversation_id, content, memory_index, upload_status) VALUES (?, ?, ?, ?, 0)
             ''', (msg.id, self.conversation_id, json.dumps(msg_dict, ensure_ascii=False), memory_index))
             # 检查RAG是否已存在
             if not self.knowledge_base.exists(msg.id):
@@ -87,7 +116,11 @@ class SqliteMemory(MemoryBase):
                 self.knowledge_base.add_documents(doc)
             # save to hub_memories
             msg_id = self.conversation_id + "_" + str(memory_index)
-            hub_memories[msg_id] = (msg_dict, memory_index)
+            if msg.type == "ltm":
+                msg_id = "ltm_" + msg_id
+            elif msg.type == "profile":
+                msg_id = "profile_" + msg_id
+            hub_memories[msg_id] = (msg_dict, memory_index, msg.type)
         conn.commit()
         conn.close()
         
@@ -95,55 +128,89 @@ class SqliteMemory(MemoryBase):
         if self.auto_upload_to_hub and not from_hub:
             conn = sqlite3.connect(self.db_path)
             c = conn.cursor()
-            for msg_id, (msg_dict, memory_index) in hub_memories.items():
+            for msg_id, (msg_dict, memory_index, msg_type) in hub_memories.items():
                 msg_serialized = serialize(msg_dict)
                 logging.debug(f"Upload memory: {self.membase_account} {msg_id}")
                 hub_client.upload_hub(self.membase_account, msg_id, msg_serialized)
-                # 上传成功后，更新upload_status=1
-                c.execute('UPDATE memories SET upload_status=1 WHERE conversation_id=? AND memory_index=?', (self.conversation_id, memory_index))
+                if msg_type == "ltm":
+                    table = "memories_ltm"
+                elif msg_type == "profile":
+                    table = "memories_profile"
+                else:
+                    table = "memories_stm"
+                c.execute(f'UPDATE {table} SET upload_status=1 WHERE conversation_id=? AND memory_index=?', (self.conversation_id, memory_index))
             conn.commit()
             conn.close()
 
-    def get(self, recent_n: Optional[int] = None, filter_func: Optional[Callable[[int, dict], bool]] = None) -> List[Message]:
+    def get(self, recent_n: Optional[int] = None, filter_func: Optional[Callable[[int, dict], bool]] = None, type: str = "stm") -> List[Message]:
+        if type == "ltm":
+            table = "memories_ltm"
+        elif type == "profile":
+            table = "memories_profile"
+        else:
+            table = "memories_stm"
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
-        sql = "SELECT content FROM memories WHERE conversation_id = ? ORDER BY created_at DESC"
+        sql = f"SELECT content FROM {table} WHERE conversation_id = ? ORDER BY created_at DESC"
         params = [self.conversation_id]
         if recent_n is not None:
             sql += " LIMIT ?"
             params.append(recent_n)
         c.execute(sql, params)
         rows = c.fetchall()
-        rows.reverse()  # 让结果按时间正序排列
+        rows.reverse()
         conn.close()
         messages = [Message.from_dict(json.loads(row[0])) for row in rows]
         if filter_func is not None:
             messages = [msg for i, msg in enumerate(messages) if filter_func(i, msg)]
         return messages
 
-    def delete(self, memory_indexes: Union[List[int], int]):
+    def delete(self, memory_indexes: Union[List[int], int], type: str = "stm"):
         if isinstance(memory_indexes, int):
             memory_indexes = [memory_indexes]
+        if type == "ltm":
+            table = "memories_ltm"
+        elif type == "profile":
+            table = "memories_profile"
+        else:
+            table = "memories_stm"
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         c.executemany(
-            "DELETE FROM memories WHERE conversation_id = ? AND memory_index = ?",
+            f"DELETE FROM {table} WHERE conversation_id = ? AND memory_index = ?",
             [(self.conversation_id, idx) for idx in memory_indexes]
         )
         conn.commit()
         conn.close()
 
-    def clear(self):
+    def clear(self, type: Optional[str] = None):
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
-        c.execute("DELETE FROM memories WHERE conversation_id = ?", (self.conversation_id,))
+        if type is None:
+            c.execute("DELETE FROM memories_stm WHERE conversation_id = ?", (self.conversation_id,))
+            c.execute("DELETE FROM memories_ltm WHERE conversation_id = ?", (self.conversation_id,))
+            c.execute("DELETE FROM memories_profile WHERE conversation_id = ?", (self.conversation_id,))
+        else:
+            if type == "ltm":
+                table = "memories_ltm"
+            elif type == "profile":
+                table = "memories_profile"
+            else:
+                table = "memories_stm"
+            c.execute(f"DELETE FROM {table} WHERE conversation_id = ?", (self.conversation_id,))
         conn.commit()
         conn.close()
 
-    def size(self) -> int:
+    def size(self, type: str = "stm") -> int:
+        if type == "ltm":
+            table = "memories_ltm"
+        elif type == "profile":
+            table = "memories_profile"
+        else:
+            table = "memories_stm"
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM memories WHERE conversation_id = ?", (self.conversation_id,))
+        c.execute(f"SELECT COUNT(*) FROM {table} WHERE conversation_id = ?", (self.conversation_id,))
         count = c.fetchone()[0]
         conn.close()
         return count

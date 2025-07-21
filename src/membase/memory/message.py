@@ -76,6 +76,7 @@ class Message:
         "url",
         "metadata",
         "timestamp",
+        "type",  # 新增type字段
     }
     """The attributes that need to be serialized and deserialized."""
 
@@ -87,6 +88,7 @@ class Message:
         url: Optional[Union[str, List[str]]] = None,
         metadata: Optional[Union[dict, str]] = None,
         echo: bool = False,
+        type: str = "stm",  # 新增type参数，默认stm
         **kwargs: Any,
     ) -> None:
         """Initialize the message object.
@@ -127,6 +129,7 @@ class Message:
         self.url = url
         self.metadata = metadata
         self.timestamp = _get_timestamp()
+        self.type = type
 
         if kwargs:
             logger.warning(
@@ -191,6 +194,11 @@ class Message:
         """The timestamp when the message is created."""
         return self._timestamp
 
+    @property
+    def type(self) -> str:
+        """The type of the message: 'stm', 'ltm', or 'profile'."""
+        return self._type
+
     @id.setter  # type: ignore[no-redef]
     def id(self, value: str) -> None:
         """Set the identity of the message."""
@@ -241,6 +249,12 @@ class Message:
     def timestamp(self, value: str) -> None:
         """Set the timestamp of the message."""
         self._timestamp = value
+
+    @type.setter
+    def type(self, value: str) -> None:
+        if value not in ["stm", "ltm", "profile"]:
+            raise ValueError(f"Invalid type {value}. Must be 'stm', 'ltm' or 'profile'.")
+        self._type = value
 
     def formatted_str(self, colored: bool = False) -> str:
         """Return the formatted string of the message. If the message has an
@@ -349,6 +363,7 @@ class Message:
             url=serialized_dict["url"],
             metadata=serialized_dict["metadata"],
             echo=False,
+            type=serialized_dict.get("type", "stm"),  # 兼容老数据
         )
         obj.id = serialized_dict["id"]
         obj.timestamp = serialized_dict["timestamp"]
