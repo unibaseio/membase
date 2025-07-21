@@ -94,14 +94,18 @@ class SqliteMemory:
             # 选择表名
             if msg.type == "ltm":
                 table = "memories_ltm"
+                msg_dict["memory_type"] = "ltm"
             elif msg.type == "profile":
                 table = "memories_profile"
+                msg_dict["memory_type"] = "profile"
             else:
                 table = "memories_stm"
+                msg_dict["memory_type"] = "stm"
             # 获取当前memory_index
             c.execute(f'SELECT MAX(memory_index) FROM {table} WHERE conversation_id = ?', (self.conversation_id,))
             row = c.fetchone()
             memory_index = (row[0] + 1) if row[0] is not None else 0
+            msg_dict["metadata"]["memory_index"] = memory_index
             # 插入sqlite
             c.execute(f'''
                 INSERT OR REPLACE INTO {table} (id, conversation_id, content, memory_index, upload_status) VALUES (?, ?, ?, ?, 0)
