@@ -5,16 +5,25 @@ LTMemory module for managing multiple SqliteMemory instances
 
 import json
 import logging
+import os
 from typing import Optional, Dict, List, Union, Callable
 import uuid
+from openai import OpenAI
+
 from .message import Message
 from .sqlite_memory import SqliteMemory
 
 from membase.storage.hub import hub_client
 import threading
 import time
-import hashlib
-import openai
+
+openai_api_key = os.getenv('OPENAI_API_KEY')
+if not openai_api_key or openai_api_key == "":
+    print("'OPENAI_API_KEY' is not set")
+    exit(1)
+
+openai_model_name = os.getenv('OPENAI_MODEL_NAME', "gpt-4.1-mini")
+print("use openai model:", openai_model_name)
 
 class LTMemory:
     """
@@ -22,9 +31,9 @@ class LTMemory:
     """
     
     def __init__(self, 
-                 membase_account: str = "default", 
-                 auto_upload_to_hub: bool = False, 
+                 membase_account: str = "", 
                  default_conversation_id: Optional[str] = None,
+                 auto_upload_to_hub: bool = False,
                  preload_from_hub: bool = False
                  ):
         """
@@ -36,14 +45,26 @@ class LTMemory:
             default_conversation_id (Optional[str]): The default conversation ID. If None, generates a new UUID.
             preload_from_hub (bool): Whether to preload from hub
         """
-        self._memories: Dict[str, SqliteMemory] = {}
+        self.client = OpenAI(
+            api_key=openai_api_key
+        )
+        
+        if membase_account == "":
+            membase_account = os.getenv('MEMBASE_ACCOUNT')
+            if not membase_account or membase_account == "":
+                membase_account = str(uuid.uuid4())
         self._membase_account = membase_account
         self._auto_upload_to_hub = auto_upload_to_hub
+        self._memory = SqliteMemory(
+            membase_account=self._membase_account,
+            auto_upload_to_hub=self._auto_upload_to_hub
+        )
         self._default_conversation_id = default_conversation_id or str(uuid.uuid4())
         self._preload_conversations = {}
         if preload_from_hub:
             self.load_all_from_hub()
-        self._profile_conversation_id = self._get_profile_conversation_id()
+        self._profile_conversation_id = "membase_profile_" + self._membase_account
+        self.load_from_hub(self._profile_conversation_id)
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._background_task, daemon=True)
         self._thread.start()
@@ -57,27 +78,6 @@ class LTMemory:
         """
         self._default_conversation_id = conversation_id or str(uuid.uuid4())
         
-    def get_memory(self, conversation_id: Optional[str] = None) -> SqliteMemory:
-        """
-        Get SqliteMemory instance for the specified conversation_id.
-        Creates a new instance if it doesn't exist.
-
-        Args:
-            conversation_id (Optional[str]): The conversation ID. If None, uses default ID.
-
-        Returns:
-            SqliteMemory: The corresponding memory instance
-        """
-        if not conversation_id:
-            conversation_id = self._default_conversation_id
-        if conversation_id not in self._memories:
-            self._memories[conversation_id] = SqliteMemory(
-                conversation_id=conversation_id,
-                membase_account=self._membase_account,
-                auto_upload_to_hub=self._auto_upload_to_hub
-            )
-        return self._memories[conversation_id]
-    
     def add(self, memories: Union[List[Message], Message, None], conversation_id: Optional[str] = None) -> None:
         """
         Add memories to the specified conversation
@@ -86,11 +86,12 @@ class LTMemory:
             memories: The memories to add
             conversation_id (Optional[str]): The conversation ID. If None, uses default ID.
         """
-        memory = self.get_memory(conversation_id)
-        memory.add(memories, from_hub=False)
+        if conversation_id is None:
+            conversation_id = self._default_conversation_id
+        self._memory.add(conversation_id, memories, from_hub=False)
         
     def get(self, conversation_id: Optional[str] = None, recent_n: Optional[int] = None,
-            filter_func: Optional[Callable[[int, dict], bool]] = None) -> list:
+            filter_func: Optional[Callable[[int, dict], bool]] = None, include_ltm: bool = False, include_profile: bool = False) -> list:
         """
         Get memories from the specified conversation
 
@@ -102,8 +103,30 @@ class LTMemory:
         Returns:
             list: List of memories
         """
-        memory = self.get_memory(conversation_id)
-        return memory.get(recent_n=recent_n, filter_func=filter_func)
+        if conversation_id is None:
+            conversation_id = self._default_conversation_id
+        
+        memory_type = "stm"
+        if conversation_id.startswith("membase_ltm_"):
+            memory_type = "ltm"
+        elif conversation_id.startswith("membase_profile_"):
+            memory_type = "profile"
+        memories = self._memory.get(conversation_id, recent_n=recent_n, filter_func=filter_func, type=memory_type)
+        if memories is None:
+            memories = []
+        if include_ltm:
+            ltm_conv_id = "membase_ltm_" + conversation_id
+            ltm_list = self._memory.get(ltm_conv_id, recent_n=1, filter_func=filter_func, type="ltm")
+            # ltm is before stm
+            if ltm_list and len(ltm_list) > 0:
+                memories.insert(0, ltm_list[0])
+        if include_profile:
+            profile_conv_id = "membase_profile_" + conversation_id
+            profile_list = self._memory.get(profile_conv_id, recent_n=1, filter_func=filter_func, type="profile")
+            # profile is at beginning
+            if profile_list and len(profile_list) > 0:
+                memories.insert(0, profile_list[0])
+        return memories
         
     def delete(self, conversation_id: Optional[str] = None, index: Union[List[int], int] = None) -> None:
         """
@@ -115,9 +138,7 @@ class LTMemory:
         """
         if conversation_id is None:
             conversation_id = self._default_conversation_id
-            
-        if conversation_id in self._memories:
-            self._memories[conversation_id].delete(index)
+        self._memory.delete(conversation_id, index)
             
     def clear(self, conversation_id: Optional[str] = None) -> None:
         """
@@ -128,10 +149,12 @@ class LTMemory:
             conversation_id (Optional[str]): The conversation ID. If None, clears all conversations.
         """
         if conversation_id is None:
-            self._memories.clear()
             self._default_conversation_id = str(uuid.uuid4())
-        elif conversation_id in self._memories:
-            self._memories[conversation_id].clear()
+            # 不支持全清，需遍历所有会话id
+            for conv_id in self.get_all_conversations():
+                self._memory.clear(conv_id)
+        else:
+            self._memory.clear(conversation_id)
             
     def get_all_conversations(self) -> List[str]:
         """
@@ -140,7 +163,7 @@ class LTMemory:
         Returns:
             List[str]: List of conversation IDs
         """
-        return list(self._memories.keys())
+        return self._memory.get_all_conversation_ids()
     
     def size(self, conversation_id: Optional[str] = None) -> int:
         """
@@ -154,10 +177,8 @@ class LTMemory:
             int: Number of memories
         """
         if conversation_id is None:
-            return sum(memory.size() for memory in self._memories.values())
-        elif conversation_id in self._memories:
-            return self._memories[conversation_id].size()
-        return 0
+            return sum(self._memory.size(conv_id) for conv_id in self.get_all_conversations())
+        return self._memory.size(conversation_id)
         
     @property
     def default_conversation_id(self) -> str:
@@ -182,7 +203,7 @@ class LTMemory:
         # Record the preloaded conversation
         self._preload_conversations[conversation_id] = True
         
-        memory = self.get_memory(conversation_id)
+        memory = self._memory # Use the single instance
         msgstrings = hub_client.get_conversation(self._membase_account, conversation_id)
         if msgstrings is None:
             return 
@@ -193,7 +214,7 @@ class LTMemory:
                 # check json_msg is a Message dict
                 if isinstance(json_msg, dict) and "id" in json_msg and "name" in json_msg:
                     msg = Message.from_dict(json_msg)
-                    memory.add(msg, from_hub=True)
+                    memory.add(conversation_id, msg, from_hub=True)
                 else:
                     logging.debug("invalid message format:", json_msg)
             except Exception as e:
@@ -227,77 +248,89 @@ class LTMemory:
         """
         return conversation_id in self._preload_conversations
 
-    def _get_profile_conversation_id(self):
-        # 每个account一个profile conversation
-        key = self._membase_account + "_profile"
-        return hashlib.sha256(key.encode()).hexdigest()
+    def get_profile_conversation_id(self) -> str:
+        return self._profile_conversation_id
 
     def _background_task(self):
         stms_per_ltm = 16  # 每次归纳的stm数量
         while not self._stop_event.is_set():
             for conv_id in self.get_all_conversations():
-                memory = self.get_memory(conv_id)
+                # conv is not started with "ltm_" or "profile_"
+                if conv_id.startswith("membase_ltm_") or conv_id.startswith("membase_profile_"):
+                    continue
+                # conv is short term memory
+                memory = self._memory # Use the single instance
                 # 获取最新stm的memory_index
-                latest_stm_list = memory.get(recent_n=1, type='stm')
+                latest_stm_list = memory.get(conv_id, recent_n=1, type='stm')
                 if latest_stm_list and latest_stm_list[0].metadata and 'memory_index' in latest_stm_list[0].metadata:
                     latest_stm_index = latest_stm_list[0].metadata['memory_index']
                 else:
                     latest_stm_index = -1
+
                 # 获取最新ltm的memory_index
-                prev_ltm_list = memory.get(recent_n=1, type='ltm')
-                if prev_ltm_list and prev_ltm_list[0].metadata and 'memory_index' in prev_ltm_list[0].metadata:
-                    last_ltm_index = prev_ltm_list[0].metadata['memory_index']
+                ltm_conv_id = "membase_ltm_" + conv_id
+                ltm_list = memory.get(ltm_conv_id, recent_n=1, type='ltm')
+                if ltm_list and ltm_list[0].metadata and 'memory_index' in ltm_list[0].metadata:
+                    last_ltm_index = ltm_list[0].metadata['memory_index']
                 else:
                     last_ltm_index = -1
 
                 # 判断是否有足够多的新stm需要归纳，如果不需要，则等待60秒
                 # 进行一次归纳
                 if latest_stm_index // stms_per_ltm > (last_ltm_index+1):
+                    print(f"summarizing ltm for {conv_id} at {last_ltm_index + 1}")
                     # 计算本轮要归纳的stm的index范围
                     start_index = (last_ltm_index + 1) * stms_per_ltm
                     end_index = start_index + stms_per_ltm - 1
                     # 取出memory_index在[start_index, end_index]之间的stm
-                    stm_list = memory.get(type='stm', filter_func=lambda idx, msg: msg.metadata and start_index <= msg.metadata.get('memory_index', -1) <= end_index)
+                    stm_list = memory.get(conv_id, type='stm', filter_func=lambda idx, msg: msg.metadata and start_index <= msg.metadata.get('memory_index', -1) <= end_index)
                     if len(stm_list) < stms_per_ltm:
+                        print(f"not enough stm to summarize ltm for {conv_id} at {last_ltm_index + 1}")
                         continue  # 理论上不会发生，保险起见
-                    prev_ltm = prev_ltm_list[0] if prev_ltm_list else None
+                    prev_ltm = ltm_list[0] if ltm_list else None
                     new_ltm = self.llm_summarize_ltm(stm_list, prev_ltm)
-                    if not hasattr(new_ltm, 'metadata') or new_ltm.metadata is None:
-                        new_ltm.metadata = {}
-                    self.add(new_ltm, conversation_id=conv_id)
+                    memory.add(ltm_conv_id, new_ltm, from_hub=False)
                     # profile归纳
-                    prev_profile_list = self.get_memory(self._profile_conversation_id).get(recent_n=1, type='profile')
+                    prev_profile_list = memory.get(self._profile_conversation_id, recent_n=1, type='profile')
                     prev_profile = prev_profile_list[0] if prev_profile_list else None
-                    new_profile = self.llm_summarize_profile(new_ltm, prev_profile)
-                    self.add(new_profile, conversation_id=self._profile_conversation_id)
-                time.sleep(60)
-        time.sleep(60)
+                    new_profile = self.llm_summarize_profile(stm_list, prev_profile)
+                    memory.add(self._profile_conversation_id, new_profile, from_hub=False)
+            if self._stop_event.wait(timeout=60):
+                break
 
     def llm_summarize_ltm(self, stm_list, prev_ltm):
-        # 使用OpenAI gpt-4.1-mini生成新ltm，格式后续可自定义
+        # 使用OpenAI生成新ltm，格式后续可自定义
         prompt = self._build_ltm_prompt(stm_list, prev_ltm)
         try:
-            response = openai.ChatCompletion.create(
-                model="gpt-4.1-mini",  # gpt-4.1-mini
+            response = self.client.chat.completions.create(
+                model=openai_model_name, 
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=512
+                temperature=0.1,
+                max_tokens=2048
             )
-            content = response["choices"][0]["message"]["content"]
-            return Message(name=self._membase_account, content=content, role="user", type="ltm")
+            content = response.choices[0].message.content
+            content = content.strip()
+            content = content.replace("```json", "").replace("```", "")
+            print(f"ltm: {content}")
+            return Message(name=self._membase_account, content=content, role="assistant", type="ltm")
         except Exception as e:
             logging.error(f"Error summarizing ltm: {e}")
             return None
 
     def llm_summarize_profile(self, new_ltm, prev_profile):
-        # 使用OpenAI gpt-4.1-mini生成新profile，格式后续可自定义
+        # 使用OpenAI生成新profile，格式后续可自定义
         prompt = self._build_profile_prompt(new_ltm, prev_profile)
-        response = openai.ChatCompletion.create(
-            model="gpt-4.1-mini",  # gpt-4.1-mini
+        response = self.client.chat.completions.create(
+            model=openai_model_name, 
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=512
+            temperature=0.1,
+            max_tokens=2048
         )
-        content = response["choices"][0]["message"]["content"]
-        return Message(name=self._membase_account, content=content, role="user", type="profile")
+        content = response.choices[0].message.content
+        content = content.strip()
+        content = content.replace("```json", "").replace("```", "")
+        print(f"profile: {content}")
+        return Message(name=self._membase_account, content=content, role="assistant", type="profile")
 
     def _build_ltm_prompt(self, stm_list, prev_ltm):
         import json
@@ -306,7 +339,6 @@ class LTMemory:
             {
                 "content": m.content,
                 "role": getattr(m, "role", ""),
-                "name": getattr(m, "name", ""),
                 "timestamp": getattr(m, "timestamp", "")
             }
             for m in stm_list
@@ -359,7 +391,6 @@ class LTMemory:
             {
                 "content": m.content,
                 "role": getattr(m, "role", ""),
-                "name": getattr(m, "name", ""),
                 "timestamp": getattr(m, "timestamp", "")
             }
             for m in stm_list

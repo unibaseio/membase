@@ -16,65 +16,49 @@ from membase.storage.hub import hub_client
 import logging
 
 class SqliteMemory:
-    def __init__(self, conversation_id: Optional[str], membase_account: str = "default", auto_upload_to_hub: bool = False, knowledge_base=None):
-        if not conversation_id:
-            self.conversation_id = str(uuid.uuid4())
-        else:
-            self.conversation_id = conversation_id
+    def __init__(self, membase_account: str = "default", auto_upload_to_hub: bool = False):
         self.membase_account = membase_account
         self.auto_upload_to_hub = auto_upload_to_hub
         self.db_path = os.path.expanduser(f"~/.membase/{membase_account}/sql.db")
         self._ensure_db()
-        if knowledge_base is not None:
-            self.knowledge_base = knowledge_base
-        else:
-            self.knowledge_base = ChromaKnowledgeBase(
-                persist_directory=f"~/.membase/{membase_account}/rag",
-                collection_name=membase_account + "_memory",
-                membase_account=membase_account
-            )
+        self.knowledge_base = ChromaKnowledgeBase(
+            persist_directory=os.path.expanduser(f"~/.membase/{membase_account}/rag"),
+            collection_name=membase_account + "_memory",
+            membase_account=membase_account
+        )
+        # load memories from db
+        self._conversation_ids = []
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute("SELECT DISTINCT conversation_id FROM memories")
+        rows = c.fetchall()
+        conn.close()
+        for row in rows:
+            conversation_id = row[0]
+            self._conversation_ids.append(conversation_id)
 
     def _ensure_db(self):
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
-        # 创建stm表
+        # 创建合并后的memories表
         c.execute('''
-            CREATE TABLE IF NOT EXISTS memories_stm (
+            CREATE TABLE IF NOT EXISTS memories (
                 id TEXT PRIMARY KEY,
                 conversation_id TEXT,
                 content TEXT,
                 memory_index INTEGER,
                 upload_status INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        # 创建ltm表
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS memories_ltm (
-                id TEXT PRIMARY KEY,
-                conversation_id TEXT,
-                content TEXT,
-                memory_index INTEGER,
-                upload_status INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        # 创建profile表
-        c.execute('''
-            CREATE TABLE IF NOT EXISTS memories_profile (
-                id TEXT PRIMARY KEY,
-                conversation_id TEXT,
-                content TEXT,
-                memory_index INTEGER,
-                upload_status INTEGER DEFAULT 0,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                memory_type TEXT
             )
         ''')
         conn.commit()
         conn.close()
 
-    def add(self, memories: Union[Sequence[Message], Message, None], from_hub: bool = False):
+    def add(self, conversation_id: str, memories: Union[Sequence[Message], Message, None], from_hub: bool = False):
+        if conversation_id not in self._conversation_ids:
+            self._conversation_ids.append(conversation_id)
         if memories is None:
             return
         if not isinstance(memories, Sequence) or isinstance(memories, str):
@@ -83,35 +67,35 @@ class SqliteMemory:
         c = conn.cursor()
         hub_memories = {}
         for msg in memories:
+            print(f"add memory: {conversation_id} {msg.content}")
             if not isinstance(msg, Message):
                 raise ValueError(f"Cannot add {type(msg)} to memory, must be a Message object.")
             msg_dict = msg.to_dict()
             # conversation_id作为metadata字段
             if isinstance(msg_dict.get("metadata"), dict):
-                msg_dict["metadata"]["conversation"] = self.conversation_id
+                msg_dict["metadata"]["conversation"] = conversation_id
             else:
-                msg_dict["metadata"] = {"conversation": self.conversation_id}
-            # 选择表名
+                msg_dict["metadata"] = {"conversation": conversation_id}
+            # 选择memory_type
             if msg.type == "ltm":
-                table = "memories_ltm"
-                msg_dict["memory_type"] = "ltm"
+                memory_type = "ltm"
             elif msg.type == "profile":
-                table = "memories_profile"
-                msg_dict["memory_type"] = "profile"
+                memory_type = "profile"
             else:
-                table = "memories_stm"
-                msg_dict["memory_type"] = "stm"
+                memory_type = "stm"
+            msg_dict["metadata"]["memory_type"] = memory_type
             # 获取当前memory_index
-            c.execute(f'SELECT MAX(memory_index) FROM {table} WHERE conversation_id = ?', (self.conversation_id,))
+            c.execute('SELECT MAX(memory_index) FROM memories WHERE conversation_id = ? AND memory_type = ?', (conversation_id, memory_type))
             row = c.fetchone()
             memory_index = (row[0] + 1) if row[0] is not None else 0
             msg_dict["metadata"]["memory_index"] = memory_index
             # 插入sqlite
-            c.execute(f'''
-                INSERT OR REPLACE INTO {table} (id, conversation_id, content, memory_index, upload_status) VALUES (?, ?, ?, ?, 0)
-            ''', (msg.id, self.conversation_id, json.dumps(msg_dict, ensure_ascii=False), memory_index))
+            c.execute('''
+                INSERT OR REPLACE INTO memories (id, conversation_id, content, memory_index, upload_status, memory_type) VALUES (?, ?, ?, ?, 0, ?)
+            ''', (msg.id, conversation_id, json.dumps(msg_dict, ensure_ascii=False), memory_index, memory_type))
             # 检查RAG是否已存在
             if not self.knowledge_base.exists(msg.id):
+                print(f"add document: {msg.id}")
                 doc = Document(
                     content=msg.content,
                     metadata=msg_dict["metadata"],
@@ -119,7 +103,7 @@ class SqliteMemory:
                 )
                 self.knowledge_base.add_documents(doc)
             # save to hub_memories
-            msg_id = self.conversation_id + "_" + str(memory_index)
+            msg_id = conversation_id + "_" + str(memory_index)
             if msg.type == "ltm":
                 msg_id = "ltm_" + msg_id
             elif msg.type == "profile":
@@ -137,26 +121,26 @@ class SqliteMemory:
                 logging.debug(f"Upload memory: {self.membase_account} {msg_id}")
                 hub_client.upload_hub(self.membase_account, msg_id, msg_serialized)
                 if msg_type == "ltm":
-                    table = "memories_ltm"
+                    memory_type = "ltm"
                 elif msg_type == "profile":
-                    table = "memories_profile"
+                    memory_type = "profile"
                 else:
-                    table = "memories_stm"
-                c.execute(f'UPDATE {table} SET upload_status=1 WHERE conversation_id=? AND memory_index=?', (self.conversation_id, memory_index))
+                    memory_type = "stm"
+                c.execute('UPDATE memories SET upload_status=1 WHERE conversation_id=? AND memory_index=? AND memory_type=?', (conversation_id, memory_index, memory_type))
             conn.commit()
             conn.close()
 
-    def get(self, recent_n: Optional[int] = None, filter_func: Optional[Callable[[int, dict], bool]] = None, type: str = "stm") -> List[Message]:
+    def get(self, conversation_id: str, recent_n: Optional[int] = None, filter_func: Optional[Callable[[int, dict], bool]] = None, type: str = "stm") -> List[Message]:
         if type == "ltm":
-            table = "memories_ltm"
+            memory_type = "ltm"
         elif type == "profile":
-            table = "memories_profile"
+            memory_type = "profile"
         else:
-            table = "memories_stm"
+            memory_type = "stm"
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
-        sql = f"SELECT content FROM {table} WHERE conversation_id = ? ORDER BY created_at DESC"
-        params = [self.conversation_id]
+        sql = "SELECT content FROM memories WHERE conversation_id = ? AND memory_type = ? ORDER BY created_at DESC"
+        params = [conversation_id, memory_type]
         if recent_n is not None:
             sql += " LIMIT ?"
             params.append(recent_n)
@@ -169,55 +153,56 @@ class SqliteMemory:
             messages = [msg for i, msg in enumerate(messages) if filter_func(i, msg)]
         return messages
 
-    def delete(self, memory_indexes: Union[List[int], int], type: str = "stm"):
+    def delete(self, conversation_id: str, memory_indexes: Union[List[int], int], type: str = "stm"):
         if isinstance(memory_indexes, int):
             memory_indexes = [memory_indexes]
         if type == "ltm":
-            table = "memories_ltm"
+            memory_type = "ltm"
         elif type == "profile":
-            table = "memories_profile"
+            memory_type = "profile"
         else:
-            table = "memories_stm"
+            memory_type = "stm"
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         c.executemany(
-            f"DELETE FROM {table} WHERE conversation_id = ? AND memory_index = ?",
-            [(self.conversation_id, idx) for idx in memory_indexes]
+            "DELETE FROM memories WHERE conversation_id = ? AND memory_index = ? AND memory_type = ?",
+            [(conversation_id, idx, memory_type) for idx in memory_indexes]
         )
         conn.commit()
         conn.close()
 
-    def clear(self, type: Optional[str] = None):
+    def clear(self, conversation_id: str, type: Optional[str] = None):
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
         if type is None:
-            c.execute("DELETE FROM memories_stm WHERE conversation_id = ?", (self.conversation_id,))
-            c.execute("DELETE FROM memories_ltm WHERE conversation_id = ?", (self.conversation_id,))
-            c.execute("DELETE FROM memories_profile WHERE conversation_id = ?", (self.conversation_id,))
+            c.execute("DELETE FROM memories WHERE conversation_id = ?", (conversation_id,))
         else:
             if type == "ltm":
-                table = "memories_ltm"
+                memory_type = "ltm"
             elif type == "profile":
-                table = "memories_profile"
+                memory_type = "profile"
             else:
-                table = "memories_stm"
-            c.execute(f"DELETE FROM {table} WHERE conversation_id = ?", (self.conversation_id,))
+                memory_type = "stm"
+            c.execute("DELETE FROM memories WHERE conversation_id = ? AND memory_type = ?", (conversation_id, memory_type))
         conn.commit()
         conn.close()
 
-    def size(self, type: str = "stm") -> int:
+    def size(self, conversation_id: str, type: str = "stm") -> int:
         if type == "ltm":
-            table = "memories_ltm"
+            memory_type = "ltm"
         elif type == "profile":
-            table = "memories_profile"
+            memory_type = "profile"
         else:
-            table = "memories_stm"
+            memory_type = "stm"
         conn = sqlite3.connect(self.db_path)
         c = conn.cursor()
-        c.execute(f"SELECT COUNT(*) FROM {table} WHERE conversation_id = ?", (self.conversation_id,))
+        c.execute("SELECT COUNT(*) FROM memories WHERE conversation_id = ? AND memory_type = ?", (conversation_id, memory_type))
         count = c.fetchone()[0]
         conn.close()
         return count
+    
+    def get_all_conversation_ids(self) -> List[str]:
+        return self._conversation_ids
 
     def load(self, memories: Union[str, list[Message], Message], overwrite: bool = False) -> None:
         """
