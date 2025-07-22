@@ -28,10 +28,10 @@ class Client:
                 
                 owner, bucket, filename, msg, event = upload_task
                 meme_struct = {
-                    "Owner": owner,
-                    "Bucket": bucket,
-                    "ID": filename,
-                    "Message": msg
+                    "owner": owner,
+                    "bucket": bucket,
+                    "id": filename,
+                    "message": msg
                 }
 
                 meme_struct_json = json.dumps(meme_struct)
