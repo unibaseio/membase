@@ -104,10 +104,6 @@ class SqliteMemory:
                 self.knowledge_base.add_documents(doc)
             # save to hub_memories
             msg_id = conversation_id + "_" + str(memory_index)
-            if msg.type == "ltm":
-                msg_id = "ltm_" + msg_id
-            elif msg.type == "profile":
-                msg_id = "profile_" + msg_id
             hub_memories[msg_id] = (msg_dict, memory_index, msg.type)
         conn.commit()
         conn.close()
