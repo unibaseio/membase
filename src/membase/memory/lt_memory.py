@@ -127,7 +127,28 @@ class LTMemory:
             if profile_list and len(profile_list) > 0:
                 memories.insert(0, profile_list[0])
         return memories
-        
+
+    def get_ltm(self, conversation_id: Optional[str] = None, recent_n: Optional[int] = None,
+            filter_func: Optional[Callable[[int, dict], bool]] = None) -> list:
+        """
+        Get ltm from the specified conversation
+        """
+        if conversation_id is None:
+            conversation_id = self._default_conversation_id
+        if conversation_id.startswith("membase_ltm_"):
+            ltm_conv_id = conversation_id
+        else:
+            ltm_conv_id = "membase_ltm_" + conversation_id
+        return self._memory.get(ltm_conv_id, recent_n=recent_n, filter_func=filter_func, type="ltm")
+    
+    def get_profile(self, recent_n: Optional[int] = None,
+            filter_func: Optional[Callable[[int, dict], bool]] = None) -> list:
+        """
+        Get profile from the membase account
+        """
+        profile_conv_id = "membase_profile_" + self._membase_account
+        return self._memory.get(profile_conv_id, recent_n=recent_n, filter_func=filter_func, type="profile")
+
     def delete(self, conversation_id: Optional[str] = None, index: Union[List[int], int] = None) -> None:
         """
         Delete memories from the specified conversation
@@ -250,6 +271,30 @@ class LTMemory:
 
     def get_profile_conversation_id(self) -> str:
         return self._profile_conversation_id
+
+    def retrieve(self, query: str, top_k: int = 5, similarity_threshold: float = 0.0, metadata_filter: Optional[dict] = None, content_filter: Optional[str] = None, **kwargs) -> list:
+        """
+        Retrieve relevant documents from the knowledge base using the given query.
+
+        Args:
+            query (str): The query string.
+            top_k (int): Number of documents to retrieve.
+            similarity_threshold (float): Minimum similarity score for retrieved documents.
+            metadata_filter (Optional[dict]): Metadata filter for documents.
+            content_filter (Optional[str]): Content filter for documents.
+            **kwargs: Additional parameters for retrieval.
+
+        Returns:
+            list: List of Document objects.
+        """
+        return self._memory.knowledge_base.retrieve(
+            query=query,
+            top_k=top_k,
+            similarity_threshold=similarity_threshold,
+            metadata_filter=metadata_filter,
+            content_filter=content_filter,
+            **kwargs
+        )
 
     def _background_task(self):
         stms_per_ltm = 16  # 每次归纳的stm数量

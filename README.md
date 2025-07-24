@@ -24,6 +24,9 @@
 - **Secure and Scalable**  
   Designed for millions of conversations and knowledge objects, with blockchain-based verification.
 
+- **Long-Term Memory (LTM)**  
+  Automatically summarizes and condenses short-term conversation history into structured long-term memory for efficient retrieval, reasoning, and user modeling.
+
 ---
 
 # 🚀 Quick Start
@@ -96,6 +99,82 @@ msg = Message(
 conversation_id = 'your_conversation'
 mm.add(msg, conversation_id)
 ```
+
+---
+
+# 🧠 Long-Term Memory (LTM) Example
+
+LTM (Long-Term Memory) automatically summarizes and condenses short-term memory (STM) into structured, high-value long-term memory for each conversation. This enables efficient retrieval, knowledge accumulation, and user profile modeling. LTM is generated in the background when enough new messages are added.
+
+```python
+import time
+import uuid
+from membase.memory.lt_memory import LTMemory
+from membase.memory.message import Message
+
+# 1. Create LTMemory instance
+test_account = "test_account_" + str(uuid.uuid4())
+ltm = LTMemory(membase_account=test_account, auto_upload_to_hub=True)
+conv_id = ltm.default_conversation_id
+name = str(uuid.uuid4())
+
+# 2. Synthesize 20 rounds of Q&A
+qa_pairs = [
+    ("What does it mean to learn efficiently?", "Learning efficiently means acquiring knowledge or skills in a way that maximizes results while minimizing wasted time and effort."),
+    ("Why is efficient learning important?", "Efficient learning helps you achieve your goals faster, retain information better, and reduces frustration and burnout."),
+    # ... (add more Q&A pairs as needed)
+]
+messages = []
+for i, (q, a) in enumerate(qa_pairs):
+    user_msg = Message(name=name, content=f"Question {i+1}: {q}", role="user")
+    assistant_msg = Message(name=name, content=f"Answer {i+1}: {a}", role="assistant")
+    messages.extend([user_msg, assistant_msg])
+
+# 3. Insert messages into memory
+for msg in messages:
+    ltm.add(msg, conversation_id=conv_id)
+    time.sleep(1)  # Ensure timestamps are unique
+
+# 4. Wait for background summarization (ltm/profile)
+print("Waiting for ltm/profile generation...")
+time.sleep(120)  # LTM summarization runs every 60 seconds
+
+# 5. Fetch LTM
+ltm_list = ltm.get_ltm(conversation_id=conv_id, recent_n=1)
+print("\nLTM:")
+for msg in ltm_list:
+    print(msg.content)
+
+# 6. Fetch profile
+profile_list = ltm.get_profile(recent_n=1)
+print("\nProfile:")
+for msg in profile_list:
+    print(msg.content)
+
+# 7. Stop background thread
+ltm.stop()
+```
+
+---
+
+# 🔍 LTM Knowledge Retrieval Example
+
+You can retrieve relevant knowledge from all stored memories (STM, LTM, profile, etc.) using the LTM's `retrieve` interface, which leverages the built-in knowledge base (Chroma).
+
+```python
+# Retrieve top-3 relevant documents for a query
+results = ltm.retrieve(
+    query="efficient learning strategies",
+    top_k=3
+)
+for doc in results:
+    print(doc.content)
+    print(doc.metadata)
+```
+
+You can also use advanced options such as `similarity_threshold`, `metadata_filter`, or `content_filter` for more precise retrieval.
+
+---
 
 🌐 Hub Access: Visit your conversations at [https://testnet.explorer.unibase.com/](https://testnet.explorer.unibase.com/)
 

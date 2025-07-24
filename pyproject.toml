@@ -1,12 +1,19 @@
 [project]
 name = "membase"
-version = "0.1.8"
+version = "0.1.9"
 description = "python sdk for membase operation: memory, knowledge, chain, auth etc."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "chromadb>=0.6.3",
     "loguru>=0.7.3",
+    "openai>=1.97.1",
     "requests>=2.32.3",
     "web3>=7.8.0",
 ]
+[[project.authors]]
+name = "felix"
+
+[build-system]
+requires = [ "hatchling",]
+build-backend = "hatchling.build"
