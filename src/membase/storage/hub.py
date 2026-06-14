@@ -8,10 +8,12 @@ import queue
 import threading
 import time
 
+from membase.storage.backend import HubBackend
+
 import logging
 logger = logging.getLogger(__name__)
 
-class Client:
+class Client(HubBackend):
     def __init__(self, base_url):
         self.base_url = base_url
         self.upload_queue = queue.Queue()
@@ -204,5 +206,23 @@ class Client:
         """Wait for all tasks in the upload queue to complete"""
         self.upload_queue.join()
 
-he = os.getenv('MEMBASE_HUB', 'https://testnet.hub.membase.io')      
-hub_client = Client(he)
+def build_hub_client() -> HubBackend:
+    """根据 env 选择存储后端(adapter boundary,见 storage/backend.py)。
+
+    MEMBASE_HUB_BACKEND:
+      - 'legacy'(默认)-> 现状中心化 hub(Client)
+      - 'da'            -> DAHubBackend(P1 可验证存储,坐到 Unibase DA 之上)
+    MEMBASE_HUB: hub endpoint(两后端共用)。
+    """
+    base = os.getenv('MEMBASE_HUB', 'https://testnet.hub.membase.io')
+    backend = os.getenv('MEMBASE_HUB_BACKEND', 'legacy').lower()
+    if backend == 'da':
+        # 延迟导入:仅在选用时才加载 DA 后端及其依赖
+        from membase.storage.da_backend import DAHubBackend
+        logger.info("Using DAHubBackend (MEMBASE_HUB_BACKEND=da)")
+        return DAHubBackend(base)
+    return Client(base)
+
+
+he = os.getenv('MEMBASE_HUB', 'https://testnet.hub.membase.io')
+hub_client = build_hub_client()
