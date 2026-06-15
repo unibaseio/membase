@@ -2,6 +2,7 @@ from typing import Optional, Callable
 import requests
 import json
 import os
+import time
 from io import BytesIO
 from urllib.parse import urlencode
 
@@ -39,6 +40,9 @@ class Client(HubBackend):
         raise_on_error: bool = False,
         on_error: Optional[Callable[[dict], None]] = None,
         timeout=None,
+        requester: Optional[Callable] = None,
+        read_retries: int = 2,
+        read_backoff: float = 0.3,
         **queue_kwargs,
     ):
         self.base_url = base_url
@@ -46,6 +50,9 @@ class Client(HubBackend):
         self.timeout = timeout or _default_timeout()
         self.wait_timeout = wait_timeout
         self.raise_on_error = raise_on_error
+        self._requester = requester or requests.post  # 注入点(测试/代理)
+        self.read_retries = read_retries
+        self.read_backoff = read_backoff
 
         if db_path is None:
             acct = account or os.getenv('MEMBASE_ACCOUNT', 'default')
@@ -61,11 +68,26 @@ class Client(HubBackend):
 
     def _post_upload(self, owner, bucket, msg_id, message):
         body = json.dumps({"owner": owner, "bucket": bucket, "id": msg_id, "message": message})
-        resp = requests.post(f"{self.base_url}/api/upload",
-                             headers={'Content-Type': 'application/json'},
-                             data=body, timeout=self.timeout)
-        resp.raise_for_status()  # 非 2xx 抛 -> 队列重试,不静默
+        resp = self._requester(f"{self.base_url}/api/upload",
+                               headers={'Content-Type': 'application/json'},
+                               data=body, timeout=self.timeout)
+        resp.raise_for_status()  # 非 2xx 抛 -> 队列重试,不静默(此处不自retry,队列负责)
         logger.debug("Upload done: %s/%s", owner, msg_id)
+
+    def _read_with_retry(self, label, **kwargs):
+        """读路径请求 + 短退避重试(P0:瞬时错误自愈)。最终失败返回 None(向后兼容)。"""
+        delay = self.read_backoff
+        for attempt in range(self.read_retries + 1):
+            try:
+                resp = self._requester(timeout=self.timeout, **kwargs)
+                resp.raise_for_status()
+                return resp
+            except requests.RequestException as err:
+                if attempt >= self.read_retries:
+                    logger.error("%s failed after %d attempts: %s", label, attempt + 1, err)
+                    return None
+                time.sleep(delay)
+                delay *= 2
 
     def initialize(self, base_url):
         if self.base_url is None:
@@ -109,56 +131,36 @@ class Client(HubBackend):
         return {"status": "pending"}  # 超时未决,后台继续重试(数据已落盘不丢)
 
     def upload_hub_data(self, owner, filename, data):
-        """Upload meme data to the hub server with multipart form."""
-        try:
-            file_stream = BytesIO(data)
-            files = {'file': (filename, file_stream, 'application/octet-stream')}
-            response = requests.post(f"{self.base_url}/api/uploadData",
-                                     files=files, data={'owner': owner}, timeout=self.timeout)
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as err:
-            logger.error("Error during uploadData: %s", err)
-            return None
+        """Upload meme data to the hub server with multipart form。"""
+        files = {'file': (filename, BytesIO(data), 'application/octet-stream')}
+        resp = self._read_with_retry(
+            "uploadData", url=f"{self.base_url}/api/uploadData",
+            files=files, data={'owner': owner})
+        return resp.json() if resp is not None else None
 
     def list_conversations(self, owner):
         """List all conversations for a given owner."""
-        encoded_form = urlencode({'owner': owner})
-        try:
-            response = requests.post(f"{self.base_url}/api/conversation", data=encoded_form,
-                                     headers={'Content-Type': 'application/x-www-form-urlencoded'},
-                                     timeout=self.timeout)
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as err:
-            logger.error("Error during list conversations: %s", err)
-            return None
+        resp = self._read_with_retry(
+            "list conversations", url=f"{self.base_url}/api/conversation",
+            data=urlencode({'owner': owner}),
+            headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        return resp.json() if resp is not None else None
 
     def get_conversation(self, owner, conversation_id):
         """Get a conversation for a given owner and conversation id."""
-        encoded_form = urlencode({'owner': owner, 'id': conversation_id})
-        try:
-            response = requests.post(f"{self.base_url}/api/conversation", data=encoded_form,
-                                     headers={'Content-Type': 'application/x-www-form-urlencoded'},
-                                     timeout=self.timeout)
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as err:
-            logger.error("Error during get conversation: %s", err)
-            return None
+        resp = self._read_with_retry(
+            "get conversation", url=f"{self.base_url}/api/conversation",
+            data=urlencode({'owner': owner, 'id': conversation_id}),
+            headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        return resp.json() if resp is not None else None
 
     def download_hub(self, owner, filename):
         """Download meme data from the hub server."""
-        encoded_form = urlencode({'id': filename, 'owner': owner})
-        try:
-            response = requests.post(f"{self.base_url}/api/download", data=encoded_form,
-                                     headers={'Content-Type': 'application/x-www-form-urlencoded'},
-                                     timeout=self.timeout)
-            response.raise_for_status()
-            return response.content
-        except requests.RequestException as err:
-            logger.error("Error during download: %s", err)
-            return None
+        resp = self._read_with_retry(
+            "download", url=f"{self.base_url}/api/download",
+            data=urlencode({'id': filename, 'owner': owner}),
+            headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        return resp.content if resp is not None else None
 
     def wait_for_upload_queue(self, timeout: float = 30.0):
         """阻塞直到无 pending(优雅退出)。"""

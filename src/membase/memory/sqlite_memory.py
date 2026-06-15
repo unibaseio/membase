@@ -36,6 +36,34 @@ class SqliteMemory:
         for row in rows:
             conversation_id = row[0]
             self._conversation_ids.append(conversation_id)
+        # P0 对账:重启时把崩溃残留的 upload_status=0 行重新入队(队列幂等,重复无害)
+        if self.auto_upload_to_hub:
+            try:
+                self.reconcile_uploads()
+            except Exception as e:
+                logging.warning(f"reconcile_uploads failed: {e}")
+
+    def reconcile_uploads(self) -> int:
+        """重新上传所有未确认入队(upload_status=0)的记忆。返回重排条数。
+
+        stored content 列即 hub 线格式(serialize(dict) == json.dumps(dict)),直接上传。
+        """
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute("SELECT id, conversation_id, content, memory_index, memory_type "
+                  "FROM memories WHERE upload_status=0")
+        rows = c.fetchall()
+        n = 0
+        for _id, conv_id, content, memory_index, memory_type in rows:
+            msg_id = conv_id + "_" + str(memory_index)
+            hub_client.upload_hub(self.membase_account, msg_id, content)
+            c.execute("UPDATE memories SET upload_status=1 WHERE id=?", (_id,))
+            n += 1
+        conn.commit()
+        conn.close()
+        if n:
+            logging.info(f"reconciled {n} pending uploads for {self.membase_account}")
+        return n
 
     def _ensure_db(self):
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
