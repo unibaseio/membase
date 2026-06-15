@@ -148,3 +148,39 @@ def test_da_backend_missing_seam_raises(tmp):
     with pytest.raises(NotImplementedError) as ei:
         be.upload_hub("acct", "mX", _msg(0))
     assert "seam" in str(ei.value).lower()
+
+
+# ----- Layer 2 降本:封段阈值默认值 + 空闲不封段 ------------------------- #
+
+class _Clock:
+    def __init__(self): self.t = 0.0
+    def __call__(self): return self.t
+    def advance(self, d): self.t += d
+
+
+def _buf_with_clock(tmp, clock):
+    kp = InMemoryKeyProvider(); kp.generate("dk-v1")
+    s = EthSigner()
+    log = ProvenanceLog("dom", signer=s, verifier=s, path=os.path.join(tmp, "l.jsonl"))
+    hot = InMemoryHotTier()
+    return SegmentBuffer(owner="acct", domain_id="dom", encryptor=Encryptor(kp),
+                         provenance=log, hot=hot, sealer=InMemorySealService(hot),
+                         registrar=FakeRegistrar(), clock=clock)
+
+
+def test_default_seal_thresholds(tmp):
+    buf = _buf_with_clock(tmp, _Clock())
+    assert buf.seal_size == 4 << 20            # 4MB(降本)
+    assert buf.seal_count == 8192
+    assert buf.seal_interval == 43200.0        # 12h 兜底(对齐 DA epoch)
+
+
+def test_idle_agent_does_not_seal(tmp):
+    clk = _Clock()
+    buf = _buf_with_clock(tmp, clk)
+    buf.put(_msg(0).encode(), msg_id="c0_0")   # 一条,远未到 size/count
+    assert len(buf.sealed_manifests) == 0
+    clk.advance(13 * 3600)                       # 空转 13h(超过 12h 兜底)
+    assert len(buf.sealed_manifests) == 0        # 无 put → 不封段(时间触发是 put 驱动的)
+    buf.put(_msg(1).encode(), msg_id="c0_1")   # 下一次 put 才触发兜底封段
+    assert len(buf.sealed_manifests) == 1

@@ -148,9 +148,10 @@ class SegmentBuffer:
         cold: Optional[ColdTier] = None,  # 冷层读;默认复用 sealer(若实现了 read)
         key_id: str = "dk-v1",
         policy: tuple = (6, 4),    # D5
-        seal_size: int = 1 << 20,  # §3.2 阈值:≥1MB
-        seal_count: int = 1024,    # 或 ≥1024 条
-        seal_interval: float = 3600.0,  # 或距上次封段 ≥1h
+        # §3.2 封段阈值(Layer 2 降本,见 ONCHAIN_ATTRIBUTION_AND_SPONSORSHIP.md):
+        seal_size: int = 4 << 20,        # 主触发:≥4MB(每 GB 的 AddPiece 笔数 ÷4 → 代付 gas ÷4)
+        seal_count: int = 8192,          # 次触发:消息条数上限(防极端);通常 size 先到
+        seal_interval: float = 43200.0,  # 时间兜底 12h(对齐 DA epoch);仅 put() 触发,空闲 agent 不封段
         clock=time.time,
         segment_id_factory=None,
         manifests_path: Optional[str] = None,  # 持久化 manifest(durable 读索引来源)
