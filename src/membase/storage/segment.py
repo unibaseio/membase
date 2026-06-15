@@ -95,10 +95,17 @@ class InMemorySealService:
         ct = self._hot.raw(owner, segment_id)
         da_cid = "cid_" + hashlib.sha256(ct).hexdigest()
         self.sealed[da_cid] = ct
+        # 真 SealService(Go hub)回传的 piece_core 形态:含 Go 侧算好的 pn_solidity/cost
+        # (此处为 fake 占位;pn_solidity 用 sha256 充当已编码字节)
         return {
             "da_cid": da_cid,
-            "piece_core": {"name": da_cid, "size": len(ct),
-                           "policy": list(policy), "streamer": "0xstream"},
+            "piece_core": {
+                "name": da_cid,
+                "pn_solidity": hashlib.sha256(ct).hexdigest(),  # 占位:真值=G1StringInSolidity
+                "cost": 1000,                                    # 占位:真值=Go 成本计算
+                "price": 100, "size": len(ct),
+                "expire": 9999, "policy": list(policy), "streamer": "0xstream",
+            },
         }
 
     # 兼作 ColdTier:封段后按 da_cid 取回(范围)密文
