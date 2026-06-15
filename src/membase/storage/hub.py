@@ -1,210 +1,180 @@
-from typing import Optional
+from typing import Optional, Callable
 import requests
 import json
 import os
 from io import BytesIO
 from urllib.parse import urlencode
-import queue
-import threading
-import time
 
 from membase.storage.backend import HubBackend
+from membase.storage.reliable_queue import (
+    PersistentUploadQueue, STATUS_DONE, STATUS_DEAD,
+)
 
 import logging
 logger = logging.getLogger(__name__)
 
+# P0-1:连接/读取 timeout(秒)。可被 env MEMBASE_HUB_TIMEOUT 覆盖(单值=读超时)。
+def _default_timeout():
+    t = os.getenv("MEMBASE_HUB_TIMEOUT")
+    return (5.0, float(t)) if t else (5.0, 30.0)
+
+
 class Client(HubBackend):
-    def __init__(self, base_url):
+    """Legacy 中心化 hub 客户端,带 P0 可靠性层(持久化队列 + 重试 + 幂等 + timeout)。
+
+    上传不再静默丢数据:入队落盘 -> 后台 worker 带退避重试 -> 仍失败进死信(可观测)。
+    读路径加 timeout,失败返回 None(保持向后兼容)。
+    """
+
+    def __init__(
+        self,
+        base_url,
+        *,
+        poster: Optional[Callable] = None,
+        db_path: Optional[str] = None,
+        account: Optional[str] = None,
+        start_worker: bool = True,
+        poll_interval: float = 0.5,
+        wait_timeout: float = 60.0,
+        raise_on_error: bool = False,
+        on_error: Optional[Callable[[dict], None]] = None,
+        timeout=None,
+        **queue_kwargs,
+    ):
         self.base_url = base_url
-        self.upload_queue = queue.Queue()
-        self.upload_thread = threading.Thread(target=self._process_upload_queue, daemon=True)
-        self.upload_thread.start()
         self.membase_id = os.getenv('MEMBASE_ID', '')
+        self.timeout = timeout or _default_timeout()
+        self.wait_timeout = wait_timeout
+        self.raise_on_error = raise_on_error
 
-    def _process_upload_queue(self):
-        while True:
-            try:
-                upload_task = self.upload_queue.get()
-                if upload_task is None:
-                    break
-                
-                owner, bucket, filename, msg, event = upload_task
-                meme_struct = {
-                    "owner": owner,
-                    "bucket": bucket,
-                    "id": filename,
-                    "message": msg
-                }
+        if db_path is None:
+            acct = account or os.getenv('MEMBASE_ACCOUNT', 'default')
+            db_path = os.path.join(os.path.expanduser('~'), '.membase', acct, 'upload_queue.db')
 
-                meme_struct_json = json.dumps(meme_struct)
-                headers = {'Content-Type': 'application/json'}
-                
-                response = requests.post(f"{self.base_url}/api/upload", headers=headers, data=meme_struct_json)
-                response.raise_for_status()
-                
-                res = response.json()
-                logger.debug(f"Upload done: {res}")
-                
-                event.set()
-                
-            except requests.RequestException as err:
-                logger.error(f"Error during upload: {err}")
-            except Exception as e:
-                logger.error(f"Unexpected error in upload queue processing: {e}")
-            finally:
-                self.upload_queue.task_done()
-                time.sleep(0.1)
+        self._queue = PersistentUploadQueue(
+            db_path, poster or self._post_upload, on_dead=on_error, **queue_kwargs)
+        if start_worker:
+            # P0-6 启动即捞 pending/到期重试项 —— 对账=队列本身
+            self._queue.start(poll_interval=poll_interval)
+
+    # ----- 传输层(默认 poster):带 timeout + 响应校验(P0-1/P0-2) ----------- #
+
+    def _post_upload(self, owner, bucket, msg_id, message):
+        body = json.dumps({"owner": owner, "bucket": bucket, "id": msg_id, "message": message})
+        resp = requests.post(f"{self.base_url}/api/upload",
+                             headers={'Content-Type': 'application/json'},
+                             data=body, timeout=self.timeout)
+        resp.raise_for_status()  # 非 2xx 抛 -> 队列重试,不静默
+        logger.debug("Upload done: %s/%s", owner, msg_id)
 
     def initialize(self, base_url):
         if self.base_url is None:
             self.base_url = base_url
 
+    def _resolve_bucket(self, owner, msg, bucket):
+        if bucket is not None:
+            return bucket
+        default_bucket = self.membase_id or owner
+        if isinstance(msg, str):
+            try:
+                return json.loads(msg).get("name", default_bucket)
+            except json.JSONDecodeError:
+                return default_bucket
+        return default_bucket
+
     def upload_hub(self, owner, filename, msg, bucket: Optional[str] = None, wait=True):
-        """Add upload task to queue, optionally wait for completion
-        
-        Args:
-            owner: Owner of the meme
-            filename: Name of the file
-            msg: Message content
-            bucket: Bucket name
-            wait: Whether to wait for upload completion
-            
-        Returns:
-            If wait=True, returns upload result; if wait=False, returns queue status
+        """入队上传(持久化 + 幂等 + 后台重试)。
+
+        wait=True 阻塞至完成/死信(上限 wait_timeout,超时返回 pending,后台仍重试)。
+        返回 status:completed / failed / pending / queued;入队异常返回 None。
         """
         try:
-            default_bucket = owner
-            if self.membase_id != "":
-                default_bucket = self.membase_id
-                
-            if bucket is None:
-                if isinstance(msg, str):
-                    try:
-                        msg_dict = json.loads(msg)
-                        bucket = msg_dict.get("name", default_bucket)
-                    except json.JSONDecodeError:
-                        bucket = default_bucket
-                else:    
-                    bucket = default_bucket
-
-            # Create an event object for synchronization
-            event = threading.Event()
-            # Add upload task and event object to queue
-            self.upload_queue.put((owner, bucket, filename, msg, event))
-            logger.debug(f"Upload task queued: {owner}/{filename}")
-            
-            if wait:
-                # Wait for upload completion
-                event.wait()
-                return {"status": "completed", "message": "Upload task completed"}
-            else:
-                return {"status": "queued", "message": "Upload task has been queued"}
-                
+            bucket = self._resolve_bucket(owner, msg, bucket)
+            message = msg if isinstance(msg, str) else json.dumps(msg)
+            key = self._queue.enqueue(owner, bucket, filename, message)
         except Exception as e:
-            logger.error(f"Error queueing upload task: {e}")
+            logger.error("Error queueing upload task: %s", e)
             return None
+
+        if not wait:
+            return {"status": "queued"}
+
+        status = self._queue.wait(key, timeout=self.wait_timeout)
+        if status == STATUS_DONE:
+            return {"status": "completed"}
+        if status == STATUS_DEAD:
+            if self.raise_on_error:
+                raise RuntimeError(f"upload failed permanently: {owner}/{filename}")
+            return {"status": "failed"}
+        return {"status": "pending"}  # 超时未决,后台继续重试(数据已落盘不丢)
 
     def upload_hub_data(self, owner, filename, data):
         """Upload meme data to the hub server with multipart form."""
         try:
-            # Create a BytesIO stream from the data to simulate a file-like object
             file_stream = BytesIO(data)
-            
-            # Prepare the files and data for the multipart request
-            files = {
-                'file': (filename, file_stream, 'application/octet-stream')
-            }
-            data = {
-                'owner': owner
-            }
-
-            # Send the POST request to upload data
-            response = requests.post(f"{self.base_url}/api/uploadData", files=files, data=data)
-
-            # Raise an exception if the request was not successful
+            files = {'file': (filename, file_stream, 'application/octet-stream')}
+            response = requests.post(f"{self.base_url}/api/uploadData",
+                                     files=files, data={'owner': owner}, timeout=self.timeout)
             response.raise_for_status()
-
-            # Parse the response JSON into a dictionary
-            res = response.json()
-
-            # Log the upload completion
-            logger.debug(f"Upload done: {res}")
-
-            # Optionally return the response if needed
-            return res
-
+            return response.json()
         except requests.RequestException as err:
-            logger.error(f"Error during upload: {err}")
+            logger.error("Error during uploadData: %s", err)
             return None
 
     def list_conversations(self, owner):
         """List all conversations for a given owner."""
-        # Prepare the form data (URL-encoded parameters)
-        form_data = {
-            'owner': owner,
-        }
-            
-        # URL encode the form data
-        encoded_form = urlencode(form_data)
-        
-        try:    
-            response = requests.post(f"{self.base_url}/api/conversation", data=encoded_form, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        encoded_form = urlencode({'owner': owner})
+        try:
+            response = requests.post(f"{self.base_url}/api/conversation", data=encoded_form,
+                                     headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                                     timeout=self.timeout)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as err:
-            logger.error(f"Error during list conversations: {err}")
+            logger.error("Error during list conversations: %s", err)
             return None
-    
+
     def get_conversation(self, owner, conversation_id):
         """Get a conversation for a given owner and conversation id."""
-        # Prepare the form data (URL-encoded parameters)
-        form_data = {
-            'owner': owner,
-            'id': conversation_id,
-        }
-            
-        # URL encode the form data
-        encoded_form = urlencode(form_data)
-        
-        try:    
-            response = requests.post(f"{self.base_url}/api/conversation", data=encoded_form, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+        encoded_form = urlencode({'owner': owner, 'id': conversation_id})
+        try:
+            response = requests.post(f"{self.base_url}/api/conversation", data=encoded_form,
+                                     headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                                     timeout=self.timeout)
             response.raise_for_status()
             return response.json()
         except requests.RequestException as err:
-            logger.error(f"Error during get conversation: {err}")
+            logger.error("Error during get conversation: %s", err)
             return None
 
     def download_hub(self, owner, filename):
         """Download meme data from the hub server."""
+        encoded_form = urlencode({'id': filename, 'owner': owner})
         try:
-            # Prepare the form data (URL-encoded parameters)
-            form_data = {
-                'id': filename,
-                'owner': owner,
-            }
-            
-            # URL encode the form data
-            encoded_form = urlencode(form_data)
-            
-            # Log the download action
-            logger.debug(f"Downloading {owner} {filename} from hub {self.base_url}")
-            
-            # Send the POST request with the encoded form data
-            response = requests.post(f"{self.base_url}/api/download", data=encoded_form, headers={'Content-Type': 'application/x-www-form-urlencoded'})
-            
-            # Raise an exception if the request was not successful
+            response = requests.post(f"{self.base_url}/api/download", data=encoded_form,
+                                     headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                                     timeout=self.timeout)
             response.raise_for_status()
-            
-            # Return the response content (bytes)
             return response.content
-        
         except requests.RequestException as err:
-            logger.error(f"Error during download: {err}")
+            logger.error("Error during download: %s", err)
             return None
 
-    def wait_for_upload_queue(self):
-        """Wait for all tasks in the upload queue to complete"""
-        self.upload_queue.join()
+    def wait_for_upload_queue(self, timeout: float = 30.0):
+        """阻塞直到无 pending(优雅退出)。"""
+        return self._queue.join_drain(timeout)
+
+    # ----- 可观测(P0-2) ---------------------------------------------------- #
+
+    @property
+    def upload_stats(self) -> dict:
+        return self._queue.stats
+
+    def upload_counts(self) -> dict:
+        return self._queue.counts()
+
+    def dead_letters(self) -> list:
+        return self._queue.dead_letters()
 
 def build_hub_client() -> HubBackend:
     """根据 env 选择存储后端(adapter boundary,见 storage/backend.py)。

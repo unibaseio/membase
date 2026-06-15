@@ -8,22 +8,14 @@ import logging
 import os
 from typing import Optional, Dict, List, Union, Callable
 import uuid
-from openai import OpenAI
 
 from .message import Message
 from .sqlite_memory import SqliteMemory
+from .llm import build_summarizer, parse_summary_json
 
 from membase.storage.hub import hub_client
 import threading
 import time
-
-openai_api_key = os.getenv('OPENAI_API_KEY')
-if not openai_api_key or openai_api_key == "":
-    print("'OPENAI_API_KEY' is not set")
-    exit(1)
-
-openai_model_name = os.getenv('OPENAI_MODEL_NAME', "gpt-4.1-mini")
-print("use openai model:", openai_model_name)
 
 class LTMemory:
     """
@@ -34,7 +26,8 @@ class LTMemory:
                  membase_account: str = "", 
                  default_conversation_id: Optional[str] = None,
                  auto_upload_to_hub: bool = False,
-                 preload_from_hub: bool = False
+                 preload_from_hub: bool = False,
+                 summarizer=None,
                  ):
         """
         Initialize LTMemory
@@ -44,11 +37,11 @@ class LTMemory:
             auto_upload_to_hub (bool): Whether to automatically upload to hub
             default_conversation_id (Optional[str]): The default conversation ID. If None, generates a new UUID.
             preload_from_hub (bool): Whether to preload from hub
+            summarizer: LLM 总结后端(默认 build_summarizer(),Claude);可注入测试 fake
         """
-        self.client = OpenAI(
-            api_key=openai_api_key
-        )
-        
+        # P0-7:可插拔 LLM(默认 Claude),惰性持有 key —— 不再 import 时 exit(1)
+        self._summarizer = summarizer or build_summarizer()
+
         if membase_account == "":
             membase_account = os.getenv('MEMBASE_ACCOUNT')
             if not membase_account or membase_account == "":
@@ -333,49 +326,52 @@ class LTMemory:
                         print(f"not enough stm to summarize ltm for {conv_id} at {last_ltm_index + 1}")
                         continue  # 理论上不会发生，保险起见
                     prev_ltm = ltm_list[0] if ltm_list else None
-                    new_ltm = self.llm_summarize_ltm(stm_list, prev_ltm)
-                    memory.add(ltm_conv_id, new_ltm, from_hub=False)
-                    # profile归纳
-                    prev_profile_list = memory.get(self._profile_conversation_id, recent_n=1, type='profile')
-                    prev_profile = prev_profile_list[0] if prev_profile_list else None
-                    new_profile = self.llm_summarize_profile(stm_list, prev_profile)
-                    memory.add(self._profile_conversation_id, new_profile, from_hub=False)
+                    try:
+                        new_ltm = self.llm_summarize_ltm(stm_list, prev_ltm)
+                        if new_ltm is not None:  # None = LLM 失败/脏输出,跳过不存
+                            memory.add(ltm_conv_id, new_ltm, from_hub=False)
+                        # profile归纳
+                        prev_profile_list = memory.get(self._profile_conversation_id, recent_n=1, type='profile')
+                        prev_profile = prev_profile_list[0] if prev_profile_list else None
+                        new_profile = self.llm_summarize_profile(stm_list, prev_profile)
+                        if new_profile is not None:
+                            memory.add(self._profile_conversation_id, new_profile, from_hub=False)
+                    except Exception as e:  # 任何意外都不该杀掉后台线程
+                        logging.error(f"summarization failed for {conv_id}: {e}")
             if self._stop_event.wait(timeout=60):
                 break
 
     def llm_summarize_ltm(self, stm_list, prev_ltm):
-        # 使用OpenAI生成新ltm，格式后续可自定义
+        """生成新 ltm。LLM 失败或输出非合法 JSON 时返回 None(不崩、不存脏数据)。"""
         prompt = self._build_ltm_prompt(stm_list, prev_ltm)
         try:
-            response = self.client.chat.completions.create(
-                model=openai_model_name, 
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-                max_tokens=2048
-            )
-            content = response.choices[0].message.content
-            content = content.strip()
-            content = content.replace("```json", "").replace("```", "")
-            print(f"ltm: {content}")
-            return Message(name=self._membase_account, content=content, role="assistant", type="ltm")
+            content = self._summarizer.complete(prompt, max_tokens=2048)
         except Exception as e:
             logging.error(f"Error summarizing ltm: {e}")
             return None
+        parsed = parse_summary_json(content, required_keys=("summary",))
+        if parsed is None:
+            logging.error("ltm summary invalid JSON, skipping")
+            return None
+        return Message(name=self._membase_account,
+                       content=json.dumps(parsed, ensure_ascii=False),
+                       role="assistant", type="ltm")
 
     def llm_summarize_profile(self, new_ltm, prev_profile):
-        # 使用OpenAI生成新profile，格式后续可自定义
+        """生成新 profile。LLM 失败或输出非合法 JSON 时返回 None。"""
         prompt = self._build_profile_prompt(new_ltm, prev_profile)
-        response = self.client.chat.completions.create(
-            model=openai_model_name, 
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.1,
-            max_tokens=2048
-        )
-        content = response.choices[0].message.content
-        content = content.strip()
-        content = content.replace("```json", "").replace("```", "")
-        print(f"profile: {content}")
-        return Message(name=self._membase_account, content=content, role="assistant", type="profile")
+        try:
+            content = self._summarizer.complete(prompt, max_tokens=2048)
+        except Exception as e:
+            logging.error(f"Error summarizing profile: {e}")
+            return None
+        parsed = parse_summary_json(content, required_keys=("profile_summary",))
+        if parsed is None:
+            logging.error("profile summary invalid JSON, skipping")
+            return None
+        return Message(name=self._membase_account,
+                       content=json.dumps(parsed, ensure_ascii=False),
+                       role="assistant", type="profile")
 
     def _build_ltm_prompt(self, stm_list, prev_ltm):
         import json
