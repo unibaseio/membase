@@ -14,11 +14,11 @@
 + offset,读单条只解相关 chunk。
 
 实现取舍:
-  - AEAD = AES-256-GCM(pycryptodome,已随 eth_account 传递可用,不新增直接依赖)。
-    ⚠️ P1 应把加密后端显式 pin(pycryptodome 或 cryptography),勿继续依赖传递依赖。
+  - AEAD = AES-256-GCM(`cryptography` 库,已在 pyproject 显式声明,审计充分,与
+    keyring 的 X25519/HKDF 统一在同一后端)。
   - nonce = 4B 每段随机 base_nonce ‖ 8B chunk_idx(共 12B)。base_nonce 每次加密随机,
     即便同 segment_id 重复加密(SK 相同)也不会 nonce 复用 ⇒ 规避 GCM nonce 重用灾难。
-  - GCM tag(16B)附在每块密文尾部。
+  - GCM tag(16B)由 AESGCM 自动附在每块密文尾部(ct‖tag)。
 """
 
 from __future__ import annotations
@@ -27,10 +27,10 @@ import os
 from dataclasses import dataclass, field
 from typing import Optional, Protocol, runtime_checkable
 
-from Crypto.Cipher import AES
-from Crypto.Protocol.KDF import HKDF
-from Crypto.Hash import SHA256
-from Crypto.Random import get_random_bytes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives import hashes
+from cryptography.exceptions import InvalidTag
 
 import logging
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ class InMemoryKeyProvider:
         self._keys[key_id] = dk
 
     def generate(self, key_id: str) -> bytes:
-        dk = get_random_bytes(32)
+        dk = os.urandom(32)
         self._keys[key_id] = dk
         return dk
 
@@ -130,8 +130,8 @@ class Encryptor:
 
     def _sk(self, key_id: str, segment_id: str) -> bytes:
         dk = self._kp.domain_key(key_id)
-        return HKDF(master=dk, key_len=32, salt=_HKDF_SALT, hashmod=SHA256,
-                    context=b"membase-seg:" + segment_id.encode("utf-8"))
+        return HKDF(algorithm=hashes.SHA256(), length=32, salt=_HKDF_SALT,
+                    info=b"membase-seg:" + segment_id.encode("utf-8")).derive(dk)
 
     @staticmethod
     def _nonce(base_nonce: bytes, chunk_idx: int) -> bytes:
@@ -141,7 +141,7 @@ class Encryptor:
 
     def encrypt(self, plaintext: bytes, *, key_id: str, segment_id: str) -> EncryptedSegment:
         sk = self._sk(key_id, segment_id)
-        base_nonce = get_random_bytes(4)
+        base_nonce = os.urandom(4)
         chunks: list = []
         out = bytearray()
         n = len(plaintext)
@@ -149,9 +149,7 @@ class Encryptor:
         plain_off = 0
         while plain_off < n or (n == 0 and idx == 0):
             block = plaintext[plain_off: plain_off + self.chunk_size]
-            cipher = AES.new(sk, AES.MODE_GCM, nonce=self._nonce(base_nonce, idx))
-            ct, tag = cipher.encrypt_and_digest(block)
-            blob = ct + tag
+            blob = AESGCM(sk).encrypt(self._nonce(base_nonce, idx), block, None)  # ct‖tag
             chunks.append(ChunkMeta(
                 idx=idx, plain_offset=plain_off, plain_len=len(block),
                 cipher_offset=len(out), cipher_len=len(blob),
@@ -191,9 +189,10 @@ class Encryptor:
 
     @staticmethod
     def _decrypt_blob(sk: bytes, base_nonce: bytes, idx: int, blob: bytes) -> bytes:
-        ct, tag = blob[:-TAG_LEN], blob[-TAG_LEN:]
-        cipher = AES.new(sk, AES.MODE_GCM, nonce=base_nonce + idx.to_bytes(8, "big"))
-        return cipher.decrypt_and_verify(ct, tag)  # tag 不符抛 ValueError
+        try:
+            return AESGCM(sk).decrypt(base_nonce + idx.to_bytes(8, "big"), blob, None)
+        except InvalidTag:
+            raise ValueError("AEAD authentication failed")  # 稳定异常类型给调用方
 
     def segment_writer(self, *, key_id: str, segment_id: str) -> "SegmentWriter":
         """增量式写:逐条消息 add() 加密成一个 chunk,共享同一段 SK / base_nonce。
@@ -226,7 +225,7 @@ class SegmentWriter:
         self.key_id = key_id
         self.segment_id = segment_id
         self._sk = enc._sk(key_id, segment_id)
-        self.base_nonce = get_random_bytes(4)
+        self.base_nonce = os.urandom(4)
         self._idx = 0
         self._plain_off = 0
         self._cipher_off = 0
@@ -234,10 +233,8 @@ class SegmentWriter:
 
     def add(self, block: bytes):
         """加密一条消息为一个 chunk,返回 (该 chunk 密文, ChunkMeta)。"""
-        cipher = AES.new(self._sk, AES.MODE_GCM,
-                         nonce=self.base_nonce + self._idx.to_bytes(8, "big"))
-        ct, tag = cipher.encrypt_and_digest(block)
-        blob = ct + tag
+        blob = AESGCM(self._sk).encrypt(
+            self.base_nonce + self._idx.to_bytes(8, "big"), block, None)  # ct‖tag
         cm = ChunkMeta(idx=self._idx, plain_offset=self._plain_off, plain_len=len(block),
                        cipher_offset=self._cipher_off, cipher_len=len(blob))
         self.chunks.append(cm)
