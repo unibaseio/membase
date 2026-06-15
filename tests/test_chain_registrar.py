@@ -7,7 +7,9 @@
 from types import SimpleNamespace
 import pytest
 
-from membase.storage.chain_registrar import ChainPieceRegistrar
+from membase.storage.chain_registrar import (
+    ChainPieceRegistrar, HubProxyRegistrar, build_registrar,
+)
 from membase.storage.segment import PieceRegistrar, InMemoryHotTier, InMemorySealService
 
 
@@ -125,3 +127,37 @@ def test_consumes_sealservice_piece_core():
     # cost / pn_solidity 来自 SealService(Go 侧),Python 不算
     allowance = next(r for r in rec if r[0] == "increaseAllowance")
     assert allowance[1][1] == res["piece_core"]["cost"]
+
+
+# ----- v1:hub 代签(默认,早期/web2 友好) -------------------------------- #
+
+def test_hub_proxy_satisfies_protocol():
+    assert isinstance(HubProxyRegistrar(), PieceRegistrar)
+
+
+def test_hub_proxy_returns_hub_tx_no_client_signing():
+    # v1:hub 已在 /api/seal 完成 AddPiece,registrar 仅回传 tx,客户端不签任何交易
+    reg = HubProxyRegistrar()
+    assert reg.sign_and_submit_add_piece({"name": "cid", "add_piece_tx": "0xHUBTX"}) == "0xHUBTX"
+
+
+def test_hub_proxy_missing_tx_raises():
+    with pytest.raises(RuntimeError):
+        HubProxyRegistrar().sign_and_submit_add_piece({"name": "cid"})  # 缺 add_piece_tx
+
+
+def test_hub_proxy_consumes_sealservice_v1():
+    hot = InMemoryHotTier()
+    hot.push(owner="o", segment_id="s", chunk_idx=0, cipher_bytes=b"y" * 16)
+    res = InMemorySealService(hot).seal(owner="o", segment_id="s", policy=(6, 4))
+    tx = HubProxyRegistrar().sign_and_submit_add_piece(res["piece_core"])
+    assert tx == res["piece_core"]["add_piece_tx"]
+
+
+def test_build_registrar_mode_select(monkeypatch):
+    monkeypatch.delenv("MEMBASE_DA_REGISTER", raising=False)
+    assert isinstance(build_registrar(), HubProxyRegistrar)          # 默认 v1 hub 代签
+    monkeypatch.setenv("MEMBASE_DA_REGISTER", "client")
+    # client 模式需链 env;缺则 build_chain_registrar 报错(此处只验路由到 client 分支)
+    with pytest.raises(Exception):
+        build_registrar()

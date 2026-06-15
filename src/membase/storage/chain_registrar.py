@@ -96,6 +96,40 @@ class ChainPieceRegistrar:
         return h.hex() if hasattr(h, "hex") else str(h)
 
 
+class HubProxyRegistrar:
+    """v1(默认,早期/web2 友好):hub 代签并支付 gas 上链;客户端零 gas、零密钥。
+
+    /api/seal 在 register=hub 模式下已由 hub 完成 sdk.Upload + AddPiece,piece_core 带
+    add_piece_tx;本 registrar 仅回传该 tx(链上已注册,无需客户端再签)。满足 PieceRegistrar。
+
+    ⚠️ 取舍:on-chain piece 归属/保证金落在 hub 账户(内容仍客户端加密 → 数据主权不变);
+       渐进去中心化时切到 ChainPieceRegistrar(v2 客户端自签),或走 meta-tx/EIP-2771
+       (用户免 gas 但链上归属仍是用户)作为中间路线。
+    """
+
+    def sign_and_submit_add_piece(self, piece_core: dict) -> str:
+        tx = piece_core.get("add_piece_tx")
+        if not tx:
+            raise RuntimeError(
+                "hub 代签模式需 /api/seal 以 register=hub 返回 add_piece_tx;"
+                "piece_core 缺该字段")
+        logger.info("AddPiece via hub proxy (v1): %s -> %s", piece_core.get("name"), tx)
+        return tx
+
+
+def build_registrar():
+    """按 env MEMBASE_DA_REGISTER 选注册模式:
+      'hub'(默认,v1 早期/web2)-> HubProxyRegistrar(hub 代签)
+      'client'(v2 渐进去中心化)-> ChainPieceRegistrar(客户端自签,需链 env)
+    """
+    mode = os.getenv("MEMBASE_DA_REGISTER", "hub").lower()
+    if mode == "client":
+        logger.info("AddPiece register mode: client self-sign (v2)")
+        return build_chain_registrar()
+    logger.info("AddPiece register mode: hub proxy (v1)")
+    return HubProxyRegistrar()
+
+
 def build_chain_registrar() -> ChainPieceRegistrar:
     """从 env + membase_chain 构造(惰性,缺 env 时报清晰错误)。
 

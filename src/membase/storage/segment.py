@@ -103,10 +103,13 @@ class InMemorySealService:
             "da_cid": da_cid,
             "piece_core": {
                 "name": da_cid,
-                "pn_solidity": hashlib.sha256(ct).hexdigest(),  # 占位:真值=G1StringInSolidity
-                "cost": 1000,                                    # 占位:真值=Go 成本计算
+                # v2(客户端自签)需要:pn_solidity + cost(占位,真值来自 Go)
+                "pn_solidity": hashlib.sha256(ct).hexdigest(),  # 真值=G1StringInSolidity
+                "cost": 1000,                                    # 真值=Go 成本计算
                 "price": 100, "size": len(ct),
                 "expire": 9999, "policy": list(policy), "streamer": "0xstream",
+                # v1(hub 代签)需要:hub 已 AddPiece 的 tx(占位,真值=hub 链上回执)
+                "add_piece_tx": "0xhubtx_" + da_cid[:10],
             },
         }
 
