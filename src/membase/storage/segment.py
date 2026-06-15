@@ -42,8 +42,9 @@ def conversation_of(msg_id: str) -> str:
 
 @runtime_checkable
 class HotTier(Protocol):
+    """热层:逐 chunk 存取(1 消息↔1 chunk)。对应 DA hub logfs(每 chunk 一条 key)。"""
     def push(self, *, owner: str, segment_id: str, chunk_idx: int, cipher_bytes: bytes) -> None: ...
-    def read(self, *, owner: str, segment_id: str, cipher_offset: int, cipher_len: int) -> bytes: ...
+    def read_chunk(self, *, owner: str, segment_id: str, chunk_idx: int) -> bytes: ...
 
 
 @runtime_checkable
@@ -70,17 +71,18 @@ class PieceRegistrar(Protocol):
 
 class InMemoryHotTier:
     def __init__(self):
-        self._buf: dict = {}  # (owner, segment_id) -> bytearray(顺序拼接密文)
+        self._buf: dict = {}  # (owner, segment_id) -> {chunk_idx: cipher_bytes}
 
     def push(self, *, owner, segment_id, chunk_idx, cipher_bytes):
-        self._buf.setdefault((owner, segment_id), bytearray()).extend(cipher_bytes)
+        self._buf.setdefault((owner, segment_id), {})[chunk_idx] = bytes(cipher_bytes)
 
-    def read(self, *, owner, segment_id, cipher_offset, cipher_len):
-        b = self._buf.get((owner, segment_id), b"")
-        return bytes(b[cipher_offset: cipher_offset + cipher_len])
+    def read_chunk(self, *, owner, segment_id, chunk_idx):
+        return self._buf[(owner, segment_id)][chunk_idx]
 
     def raw(self, owner, segment_id) -> bytes:
-        return bytes(self._buf.get((owner, segment_id), b""))
+        # 按 chunk_idx 顺序拼接(= 封段 blob,与 manifest 的 cipher_offset 一致)
+        chunks = self._buf.get((owner, segment_id), {})
+        return b"".join(chunks[i] for i in sorted(chunks))
 
 
 class InMemorySealService:
@@ -275,10 +277,9 @@ class SegmentBuffer:
         if da_cid:  # 冷层:DA 按 da_cid 取回(§7.1 cold)
             cipher = self._cold.read(da_cid=da_cid, cipher_offset=entry["cipher_offset"],
                                      cipher_len=entry["cipher_len"])
-        else:       # 在途段:热层快路径(§7.1 fast)
-            cipher = self._hot.read(owner=self.owner, segment_id=manifest["segment_id"],
-                                    cipher_offset=entry["cipher_offset"],
-                                    cipher_len=entry["cipher_len"])
+        else:       # 在途段:热层快路径(§7.1 fast),按 chunk 取
+            cipher = self._hot.read_chunk(owner=self.owner, segment_id=manifest["segment_id"],
+                                          chunk_idx=entry["chunk_idx"])
         chunk_meta = {"idx": entry["chunk_idx"]}
         return self._enc.decrypt_chunk(manifest["enc"], chunk_meta, cipher,
                                        key_id=manifest["enc"]["key_id"],
