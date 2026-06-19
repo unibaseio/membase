@@ -268,7 +268,7 @@ membase_chain.getTask(task_id)
 
 # 📜 License
 
-MIT License. See [LICENSE](./LICENSE) for details.
+MIT License. See [LICENSE](https://opensource.org/license/MIT) for details.
 
 ---
 
