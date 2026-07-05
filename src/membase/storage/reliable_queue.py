@@ -77,8 +77,13 @@ class PersistentUploadQueue:
                 owner TEXT, bucket TEXT, msg_id TEXT, message TEXT,
                 status TEXT, attempts INTEGER,
                 next_attempt REAL, created_at REAL, updated_at REAL,
-                last_error TEXT
+                last_error TEXT, kind TEXT DEFAULT ''
             )""")
+        # migrate pre-existing DBs (kind column added later); ignore if present
+        try:
+            self._conn.execute("ALTER TABLE upload_queue ADD COLUMN kind TEXT DEFAULT ''")
+        except sqlite3.OperationalError:
+            pass
         self._conn.commit()
 
         self._running = False
@@ -86,7 +91,7 @@ class PersistentUploadQueue:
 
     # ----- 入队(幂等) ------------------------------------------------------ #
 
-    def enqueue(self, owner: str, bucket: str, msg_id: str, message: str) -> str:
+    def enqueue(self, owner: str, bucket: str, msg_id: str, message: str, kind: str = "") -> str:
         k = _key(owner, bucket, msg_id)
         now = self._clock()
         with self._lock:
@@ -97,16 +102,19 @@ class PersistentUploadQueue:
                 self._signal(k)  # 已完成,wait 立即返回
                 return k
             # 新建或复活(dead/pending 重新入队):重置为 pending,立即可投
+            # kind 是 bucket 场景(memory 默认 / knowledgebase / …),随 item 持久化,
+            # 崩溃/重启后 replay 仍带得上;hub 侧只在首次建 bucket 时用它。
             self._conn.execute("""
                 INSERT INTO upload_queue
                     (key, owner, bucket, msg_id, message, status, attempts,
-                     next_attempt, created_at, updated_at, last_error)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                     next_attempt, created_at, updated_at, last_error, kind)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                 ON CONFLICT(key) DO UPDATE SET
                     status=excluded.status, next_attempt=excluded.next_attempt,
-                    message=excluded.message, updated_at=excluded.updated_at
+                    message=excluded.message, updated_at=excluded.updated_at,
+                    kind=excluded.kind
             """, (k, owner, bucket, msg_id, message, STATUS_PENDING, 0,
-                  now, now, now, None))
+                  now, now, now, None, kind))
             self._conn.commit()
             self._stats["enqueued"] += 1
             self._events.pop(k, None)  # 清掉旧 event,等待新一轮
@@ -119,17 +127,23 @@ class PersistentUploadQueue:
         now = self._clock()
         with self._lock:
             rows = self._conn.execute("""
-                SELECT key, owner, bucket, msg_id, message, attempts
+                SELECT key, owner, bucket, msg_id, message, attempts, kind
                 FROM upload_queue WHERE status=? AND next_attempt<=?
                 ORDER BY next_attempt
             """, (STATUS_PENDING, now)).fetchall()
-        for k, owner, bucket, msg_id, message, attempts in rows:
-            self._attempt(k, owner, bucket, msg_id, message, attempts)
+        for k, owner, bucket, msg_id, message, attempts, kind in rows:
+            self._attempt(k, owner, bucket, msg_id, message, attempts, kind)
         return len(rows)
 
-    def _attempt(self, k, owner, bucket, msg_id, message, attempts):
+    def _attempt(self, k, owner, bucket, msg_id, message, attempts, kind=""):
         try:
-            self._poster(owner, bucket, msg_id, message)
+            # Pass kind only when set, so injected posters with the historical
+            # (owner, bucket, msg_id, message) signature keep working — only
+            # kind-aware uploads (e.g. knowledgebase) opt into the extra arg.
+            if kind:
+                self._poster(owner, bucket, msg_id, message, kind=kind)
+            else:
+                self._poster(owner, bucket, msg_id, message)
         except Exception as e:  # 传输失败:退避重排,或进死信
             attempts += 1
             with self._lock:

@@ -66,8 +66,12 @@ class Client(HubBackend):
 
     # ----- 传输层(默认 poster):带 timeout + 响应校验(P0-1/P0-2) ----------- #
 
-    def _post_upload(self, owner, bucket, msg_id, message):
-        body = json.dumps({"owner": owner, "bucket": bucket, "id": msg_id, "message": message})
+    def _post_upload(self, owner, bucket, msg_id, message, kind=""):
+        payload = {"owner": owner, "bucket": bucket, "id": msg_id, "message": message}
+        if kind:
+            # bucket 场景(如 knowledgebase);hub 仅在首次建 bucket 时采用,后续忽略。
+            payload["kind"] = kind
+        body = json.dumps(payload)
         resp = self._requester(f"{self.base_url}/api/upload",
                                headers={'Content-Type': 'application/json'},
                                data=body, timeout=self.timeout)
@@ -104,16 +108,19 @@ class Client(HubBackend):
                 return default_bucket
         return default_bucket
 
-    def upload_hub(self, owner, filename, msg, bucket: Optional[str] = None, wait=True):
+    def upload_hub(self, owner, filename, msg, bucket: Optional[str] = None, wait=True, kind: str = ""):
         """入队上传(持久化 + 幂等 + 后台重试)。
 
         wait=True 阻塞至完成/死信(上限 wait_timeout,超时返回 pending,后台仍重试)。
         返回 status:completed / failed / pending / queued;入队异常返回 None。
+
+        kind:bucket 场景("memory" 默认 / "knowledgebase" / …)。随上传带给 hub,
+        hub 仅在首次创建该 bucket 时采用(bucket 的 kind 不可变);后续上传忽略。
         """
         try:
             bucket = self._resolve_bucket(owner, msg, bucket)
             message = msg if isinstance(msg, str) else json.dumps(msg)
-            key = self._queue.enqueue(owner, bucket, filename, message)
+            key = self._queue.enqueue(owner, bucket, filename, message, kind=kind)
         except Exception as e:
             logger.error("Error queueing upload task: %s", e)
             return None

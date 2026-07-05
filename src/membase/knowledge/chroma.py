@@ -143,7 +143,8 @@ class ChromaKnowledgeBase(KnowledgeBase):
                 hub_client.upload_hub(
                     owner=self._membase_account,
                     filename=doc.doc_id,
-                    msg=json.dumps(doc.to_dict())
+                    msg=json.dumps(doc.to_dict()),
+                    kind="knowledgebase",  # tag the hub bucket as a knowledge base
                 )
 
     def update_documents(
@@ -189,9 +190,10 @@ class ChromaKnowledgeBase(KnowledgeBase):
                 hub_client.upload_hub(
                     owner=self._membase_account,
                     filename=doc.doc_id,
-                    msg=json.dumps(doc.to_dict())
+                    msg=json.dumps(doc.to_dict()),
+                    kind="knowledgebase",  # tag the hub bucket as a knowledge base
                 )
-        
+
         try:
             # Update in ChromaDB
             self.collection.update(
