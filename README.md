@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.unibase.com/memory">Website</a> ·
+  <a href="https://membase.ai">Website</a> ·
   <a href="https://docs.membase.ai">Docs</a> ·
   <a href="https://www.app.membase.ai">Web app</a> ·
   <a href="https://discord.gg/nB9EfPGsSf">Discord</a> ·
