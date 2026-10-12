@@ -9,7 +9,7 @@ from typing import Callable
 from .errors import MembaseError
 
 INSTALL_LOCAL = "pip install 'unibaseio-membase[local]'"
-HOSTED_MCP_URL = "https://api.app.membase.io/mcp-http"
+HOSTED_MCP_URL = "https://api.app.membase.ai/mcp-http"
 
 
 class MissingDependencyError(MembaseError):

@@ -88,7 +88,7 @@ def architecture() -> str:
     xs = [PAD + i * (cw + gap) for i in range(3)]
     ys, h = [60, 138, 216], 60
     body = [_node(xs[0], ys[0], cw, h, "Membase()", mono=True),
-            _node(xs[1], ys[0], cw, h, "Hosted API", "api.app.membase.io"),
+            _node(xs[1], ys[0], cw, h, "Hosted API", "api.app.membase.ai"),
             _node(xs[2], ys[0], cw, h, "Your Membase account", solid=True),
             _node(xs[0], ys[1], cw, h, "Membase(local=True)", mono=True),
             _node(xs[1], ys[1], cw, h, "unibaseio-membase-core", "in your process"),
@@ -157,7 +157,7 @@ def mcp() -> str:
         body.append(_line(x + cw / 2, 102, x + cw / 2, 120))
     body.append(_line(PAD + cw / 2, 120, W - PAD - cw / 2, 120))
     sw = (W - 2 * PAD - 24) / 2
-    for i, (title, sub) in enumerate([("Hosted", "api.app.membase.io/mcp-http"), ("Local", "membase --local mcp")]):
+    for i, (title, sub) in enumerate([("Hosted", "api.app.membase.ai/mcp-http"), ("Local", "membase --local mcp")]):
         x = PAD + i * (sw + 24)
         body.append(_arrow(x + sw / 2, 120, x + sw / 2, 138))
         body.append(_node(x, 142, sw, 60, title, sub))

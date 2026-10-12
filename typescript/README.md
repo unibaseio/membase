@@ -5,12 +5,12 @@
 <h1 align="center">@unibaseio/membase</h1>
 
 <p align="center">
-  <b>One memory. Every AI.</b><br>
-  The Membase SDK for TypeScript: drop-in memory infrastructure for AI agents and apps.
+  <b>One memory. Every AI. Only yours.</b><br>
+  The Membase SDK for TypeScript: the memory layer for AI agents.
 </p>
 
 <p align="center">
-  <a href="https://www.unibase.com/memory">Website</a> ·
+  <a href="https://membase.ai">Website</a> ·
   <a href="https://docs.membase.ai">Docs</a> ·
   <a href="https://www.app.membase.ai">Web app</a> ·
   <a href="https://github.com/unibaseio/membase-ai">GitHub</a> ·

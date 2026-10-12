@@ -1,7 +1,7 @@
 {
   "name": "@unibaseio/membase",
   "version": "0.3.0",
-  "description": "Membase SDK for TypeScript: drop-in memory infrastructure for AI agents and apps, hosted or local via `membase --local serve`.",
+  "description": "Membase SDK for TypeScript: the memory layer for AI agents, hosted or local via `membase --local serve`.",
   "license": "SEE LICENSE IN LICENSE",
   "publishConfig": {
     "access": "public"

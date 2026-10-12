@@ -5,7 +5,7 @@
 <h1 align="center">Membase</h1>
 
 <p align="center">
-  <b>One memory. Every AI.</b><br>
+  <b>One memory. Every AI. Only yours.</b><br>
   Teach it once. Every AI remembers.
 </p>
 
@@ -27,7 +27,8 @@
   <img src="https://raw.githubusercontent.com/unibaseio/membase-ai/main/assets/hero.svg" width="840" alt="Add sources, manage one memory, use it from every AI and app">
 </p>
 
-Membase keeps one memory for everything you and your agents know, and every AI you use reads it.
+Membase is the memory layer for AI agents. It keeps one memory for everything you and your agents
+know, and every AI you use reads it.
 You stop re-explaining yourself each time you switch models or tools.
 
 - **Add.** Facts, documents, web pages and chat exports from Claude or ChatGPT go into one memory.
@@ -54,7 +55,8 @@ Recordings: [Python SDK](https://github.com/unibaseio/membase-ai/blob/main/asset
   <img src="https://raw.githubusercontent.com/unibaseio/membase-ai/main/assets/results.svg" width="840" alt="LoCoMo 93.1%, LongMemEval_S 92.6%, DMR 92.2%">
 </p>
 
-On three public long-term memory benchmarks, with a few thousand tokens of context per question.
+93.1% on LoCoMo, 92.6% on LongMemEval_S and 92.2% on DMR, using about 3× fewer tokens than the full
+history on LoCoMo and 11× fewer on LongMemEval_S. Method and results: [membase.ai/research](https://membase.ai/research)
 
 ## Quickstart
 
@@ -106,7 +108,7 @@ Without `--local` (or `--store DIR`, both before the command) commands use the h
 
 ```bash
 claude mcp add membase -- membase --local mcp                                   # local
-claude mcp add --transport http membase https://api.app.membase.io/mcp-http \
+claude mcp add --transport http membase https://api.app.membase.ai/mcp-http \
   --header "Authorization: Bearer $MEMBASE_API_KEY"                             # hosted
 ```
 
