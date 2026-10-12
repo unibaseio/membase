@@ -1,6 +1,6 @@
 {
   "name": "@unibaseio/membase-cli",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "The `membase` command for the hosted Membase API, without Python. Local memory, `serve` and `mcp` are in the Python package unibaseio-membase.",
   "license": "SEE LICENSE IN LICENSE",
   "publishConfig": {
@@ -32,7 +32,7 @@
   ],
   "homepage": "https://www.unibase.com/memory",
   "dependencies": {
-    "@unibaseio/membase": "^0.3.0"
+    "@unibaseio/membase": "^0.3.1"
   },
   "devDependencies": {
     "@types/node": "^20.19.43",

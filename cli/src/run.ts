@@ -5,7 +5,7 @@ import { basename, extname } from "node:path";
 import { parseArgs } from "node:util";
 import { Membase, MembaseError, type MembaseOptions } from "@unibaseio/membase";
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.3.1";
 
 const INSTALL_LOCAL = "pip install 'unibaseio-membase[local]'";
 const HOSTED_MCP_URL = "https://api.app.membase.ai/mcp-http";
