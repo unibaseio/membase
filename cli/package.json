@@ -30,7 +30,7 @@
     "cli",
     "ai"
   ],
-  "homepage": "https://www.unibase.com/memory",
+  "homepage": "https://membase.ai",
   "dependencies": {
     "@unibaseio/membase": "^0.3.1"
   },
