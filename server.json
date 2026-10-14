@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.unibaseio/membase",
+  "name": "ai.membase/membase",
   "description": "Long-term memory for you and your AIs: search memories, read the profile, add facts and documents.",
   "version": "1.0.0",
   "websiteUrl": "https://app.membase.ai",
