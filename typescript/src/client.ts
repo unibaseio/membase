@@ -3,7 +3,7 @@
 import { APIConnectionError, APITimeoutError, errorFor } from "./errors.js";
 
 export const VERSION = "0.3.1";
-export const DEFAULT_BASE_URL = "https://api.app.membase.ai";
+export const DEFAULT_BASE_URL = "https://api.app.membase.com";
 /** The first search after a quiet spell can take up to a minute while the memory wakes. */
 export const DEFAULT_TIMEOUT_MS = 90_000;
 export const DEFAULT_MAX_RETRIES = 2;
@@ -14,7 +14,7 @@ type Fetch = typeof fetch;
 export interface MembaseOptions {
   /** Defaults to `process.env.MEMBASE_API_KEY`. */
   apiKey?: string;
-  /** Defaults to `process.env.MEMBASE_BASE_URL`, then `https://api.app.membase.ai`. */
+  /** Defaults to `process.env.MEMBASE_BASE_URL`, then `https://api.app.membase.com`. */
   baseUrl?: string;
   /** Per-request timeout. Default 90 s. */
   timeoutMs?: number;
