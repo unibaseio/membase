@@ -13,7 +13,7 @@ from membase.mcp.automem import AutoMemoryStore
 _RUN_HUB = os.environ.get("MEMBASE_MCP_TEST_HUB") == "1"
 
 
-TESTNET_HUB = "https://testnet.hub.membase.io"
+TESTNET_HUB = "https://testnet.hub.membase.com"
 
 
 class MemoryLog:
