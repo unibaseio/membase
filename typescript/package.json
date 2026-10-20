@@ -38,7 +38,7 @@
     "ai",
     "agents"
   ],
-  "homepage": "https://membase.ai",
+  "homepage": "https://membase.com",
   "devDependencies": {
     "@types/node": "^20.19.43",
     "typescript": "^5.6.2",

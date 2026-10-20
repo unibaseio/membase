@@ -35,8 +35,8 @@ dev = ["pytest>=8.2", "ruff==0.15.12"]
 membase = "membase.cli:main"
 
 [project.urls]
-Homepage = "https://membase.ai"
-Documentation = "https://docs.membase.ai"
+Homepage = "https://membase.com"
+Documentation = "https://docs.membase.com"
 Repository = "https://github.com/unibaseio/membase-ai"
 
 [build-system]

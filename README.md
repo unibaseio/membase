@@ -16,9 +16,9 @@
 </p>
 
 <p align="center">
-  <a href="https://membase.ai">Website</a> ·
-  <a href="https://docs.membase.ai">Docs</a> ·
-  <a href="https://www.app.membase.ai">Web app</a> ·
+  <a href="https://membase.com">Website</a> ·
+  <a href="https://docs.membase.com">Docs</a> ·
+  <a href="https://app.membase.com">Web app</a> ·
   <a href="https://discord.gg/nB9EfPGsSf">Discord</a> ·
   <a href="https://x.com/Unibase_AI">X</a>
 </p>
@@ -37,7 +37,7 @@ You stop re-explaining yourself each time you switch models or tools.
 
 This repository is the developer side: Python and TypeScript clients, the `membase` command line
 and an MCP server. The memory lives in your Membase account, which the
-[web app](https://www.app.membase.ai) and browser extension also fill, or on your machine with
+[web app](https://app.membase.com) and browser extension also fill, or on your machine with
 `unibaseio-membase[local]`.
 
 ## Write once, read from any AI
@@ -56,7 +56,7 @@ Recordings: [Python SDK](https://github.com/unibaseio/membase-ai/blob/main/asset
 </p>
 
 93.1% on LoCoMo, 92.6% on LongMemEval_S and 92.2% on DMR, using about 3× fewer tokens than the full
-history on LoCoMo and 11× fewer on LongMemEval_S. Method and results: [membase.ai/research](https://membase.ai/research)
+history on LoCoMo and 11× fewer on LongMemEval_S. Method and results: [membase.com/research](https://membase.com/research)
 
 ## Quickstart
 
@@ -83,7 +83,7 @@ m.add("Design notes …", container="Engineering", custom_id="design-1")   # a d
 m.ask("Which database did we choose for the ledger?")
 ```
 
-Every method, its REST route and MCP tool, and the access it needs: [SDK reference](https://docs.membase.ai/build/reference/sdk-quickstart/).
+Every method, its REST route and MCP tool, and the access it needs: [SDK reference](https://docs.membase.com/build/reference/sdk-quickstart/).
 The Python package is `unibaseio-membase` (import `membase`); `membase` on PyPI is unrelated.
 
 ## Command line
@@ -108,19 +108,19 @@ Without `--local` (or `--store DIR`, both before the command) commands use the h
 
 ```bash
 claude mcp add membase -- membase --local mcp                                   # local
-claude mcp add --transport http membase https://api.app.membase.ai/mcp-http \
+claude mcp add --transport http membase https://api.app.membase.com/mcp-http \
   --header "Authorization: Bearer $MEMBASE_API_KEY"                             # hosted
 ```
 
 Hosted without the header, the connection signs you in and is read-only. Setup for Claude, ChatGPT,
-Cursor, Codex and other clients: [Connect your AI](https://docs.membase.ai/connect/).
+Cursor, Codex and other clients: [Connect your AI](https://docs.membase.com/connect/).
 
 ## Docs
 
-- [SDK reference](https://docs.membase.ai/build/reference/sdk-quickstart/): methods, REST routes, MCP tools, access levels
-- [Memory operations](https://docs.membase.ai/build/guides/memory-operations/): containers, documents, memories, profile, ask
-- [Authentication](https://docs.membase.ai/build/reference/authentication/): keys and what each one can reach
-- [Connect your AI](https://docs.membase.ai/connect/): per-client MCP setup
+- [SDK reference](https://docs.membase.com/build/reference/sdk-quickstart/): methods, REST routes, MCP tools, access levels
+- [Memory operations](https://docs.membase.com/build/guides/memory-operations/): containers, documents, memories, profile, ask
+- [Authentication](https://docs.membase.com/build/reference/authentication/): keys and what each one can reach
+- [Connect your AI](https://docs.membase.com/connect/): per-client MCP setup
 - [Local engine](https://github.com/unibaseio/membase-ai/blob/main/docs/reference.md): what it stores, `membase serve`, settings
 
 ## License

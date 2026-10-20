@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://membase.ai">Website</a> ·
-  <a href="https://docs.membase.ai">Docs</a> ·
-  <a href="https://www.app.membase.ai">Web app</a> ·
+  <a href="https://membase.com">Website</a> ·
+  <a href="https://docs.membase.com">Docs</a> ·
+  <a href="https://app.membase.com">Web app</a> ·
   <a href="https://github.com/unibaseio/membase-ai">GitHub</a> ·
   <a href="https://discord.gg/nB9EfPGsSf">Discord</a>
 </p>

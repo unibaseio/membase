@@ -21,7 +21,7 @@ from pathlib import Path
 
 VERSION = "0.3.0"  # aliases follow the real packages
 PLACEHOLDER = "0.0.1"
-HOME = "https://membase.ai"
+HOME = "https://membase.com"
 SDK, CORE = "unibaseio-membase", "unibaseio-membase-core"
 NPM_SDK, NPM_CLI = "@unibaseio/membase", "@unibaseio/membase-cli"
 CORE_EXTRAS = ("multimodal", "anthropic", "ollama", "all")

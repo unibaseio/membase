@@ -12,7 +12,7 @@ import httpx
 from ._version import __version__
 from .errors import APIConnectionError, APITimeoutError, error_for
 
-DEFAULT_BASE_URL = "https://api.app.membase.ai"
+DEFAULT_BASE_URL = "https://api.app.membase.com"
 # The first search after a quiet spell can take up to a minute while the memory wakes.
 DEFAULT_TIMEOUT = 90.0
 DEFAULT_MAX_RETRIES = 2
