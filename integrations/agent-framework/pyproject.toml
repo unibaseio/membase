@@ -1,0 +1,55 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-framework-membase"
+dynamic = ["version"]
+description = "Membase long-term memory for Microsoft Agent Framework (Python): a context provider with time-boxed recall and deliberate save/search/profile tools."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Unibase" }]
+keywords = ["agent-framework", "microsoft-agent-framework", "membase", "memory", "long-term-memory", "context-provider", "agents"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "agent-framework-core>=1.0.0,<2",
+    "unibaseio-membase>=0.3.2",
+]
+
+[project.optional-dependencies]
+local = ["unibaseio-membase[local]>=0.3.2"]
+
+[project.urls]
+Homepage = "https://github.com/unibaseio/membase/tree/main/integrations/agent-framework"
+Repository = "https://github.com/unibaseio/membase"
+Issues = "https://github.com/unibaseio/membase/issues"
+Documentation = "https://docs.membase.com"
+
+[tool.hatch.version]
+path = "src/agent_framework_membase/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_framework_membase"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "examples", "README.md", "LICENSE", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
