@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://pypi.org/project/unibaseio-membase/"><img src="https://img.shields.io/pypi/v/unibaseio-membase?label=pypi" alt="PyPI"></a>
   <a href="https://www.npmjs.com/package/@unibaseio/membase"><img src="https://img.shields.io/npm/v/@unibaseio/membase?label=npm" alt="npm"></a>
-  <a href="https://github.com/unibaseio/membase-ai/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-proprietary-blue" alt="Proprietary"></a>
+  <a href="https://github.com/unibaseio/membase/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
 
 <p align="center">
@@ -121,10 +121,10 @@ Cursor, Codex and other clients: [Connect your AI](https://docs.membase.com/conn
 - [Memory operations](https://docs.membase.com/build/guides/memory-operations/): containers, documents, memories, profile, ask
 - [Authentication](https://docs.membase.com/build/reference/authentication/): keys and what each one can reach
 - [Connect your AI](https://docs.membase.com/connect/): per-client MCP setup
+- [Agent framework integrations](integrations/): Hermes, OpenClaw, LangChain, Strands, NeMo Agent Toolkit, Agent Framework, ADK and Dify
 - [Local engine](https://github.com/unibaseio/membase-ai/blob/main/docs/reference.md): what it stores, `membase serve`, settings
 
 ## License
 
-Copyright © 2026 Unibase. All rights reserved. Proprietary; see
-[LICENSE](https://github.com/unibaseio/membase-ai/blob/main/LICENSE). `unibaseio-membase[local]` also
+MIT; see [LICENSE](https://github.com/unibaseio/membase/blob/main/LICENSE). `unibaseio-membase[local]` also
 installs unibaseio-membase-core, the compiled engine, under its own Unibase license.

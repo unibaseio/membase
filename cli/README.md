@@ -47,4 +47,4 @@ Install one of the two: both put a `membase` command on your PATH. For code, use
 
 ## License
 
-Copyright © 2026 Unibase. All rights reserved. Proprietary; see LICENSE.
+MIT; see LICENSE.

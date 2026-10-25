@@ -84,7 +84,7 @@ version = "{version}"
 description = {json.dumps(summary)}
 readme = "README.md"
 requires-python = "{requires_python}"
-license = {{ text = "Proprietary" }}
+license = {{ text = "MIT" }}
 authors = [{{ name = "Unibase" }}]
 dependencies = {toml_list(deps)}
 {"[project.optional-dependencies]" + chr(10) + extra_lines if extras else ""}
@@ -118,7 +118,7 @@ def write_pypi(out: Path) -> None:
 
 def _package_json(name: str, version: str, description: str, **extra: object) -> str:
     pkg = {"name": name, "version": version, "description": description,
-           "license": "UNLICENSED", "homepage": HOME, "type": "module", **extra}
+           "license": "MIT", "homepage": HOME, "type": "module", **extra}
     return json.dumps(pkg, indent=2) + "\n"
 
 
