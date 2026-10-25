@@ -1,0 +1,103 @@
+{
+  "id": "membase",
+  "name": "Membase",
+  "description": "Your Membase account as the agent's memory: time-boxed recall before each turn, plus membase_search, membase_save (only when asked) and membase_profile tools. One API key is one person's memory.",
+  "version": "0.1.0",
+  "kind": "memory",
+  "categories": ["memory"],
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": ["membase_search", "membase_save", "membase_profile"]
+  },
+  "configContracts": {
+    "secretInputs": {
+      "paths": [
+        {
+          "path": "apiKey",
+          "expected": "string",
+          "ownerKind": "capability"
+        }
+      ]
+    }
+  },
+  "uiHints": {
+    "apiKey": {
+      "label": "Membase API key",
+      "sensitive": true,
+      "placeholder": "mbk_...",
+      "help": "A developer key from Connect > Developer keys in the Membase app (Read, or Read & write to save). Prefer a SecretRef or ${MEMBASE_API_KEY}; when unset the MEMBASE_API_KEY environment variable is used."
+    },
+    "baseUrl": {
+      "label": "API base URL",
+      "placeholder": "https://api.app.membase.ai",
+      "advanced": true,
+      "help": "Only for a self-hosted or local Membase server (membase --local serve)."
+    },
+    "container": {
+      "label": "Default Memory (container id)",
+      "placeholder": "mv-...",
+      "help": "Where membase_save writes when the model names no container, and the one Memory automatic recall searches. Leave empty to search every Memory the key reaches."
+    },
+    "recallBudgetMs": {
+      "label": "Recall budget (ms)",
+      "placeholder": "8000",
+      "advanced": true,
+      "help": "How long automatic recall may wait before the turn continues without memory. The first search after a quiet spell can take up to a minute."
+    },
+    "autoRecall": {
+      "label": "Automatic recall",
+      "help": "Search Membase with the user's message before each turn and add what it finds as context."
+    },
+    "autoCapture": {
+      "label": "Save before compaction",
+      "help": "Off by default. When on, before OpenClaw compacts a long session the agent is asked to save durable facts with membase_save."
+    },
+    "allowSharedConversations": {
+      "label": "Read in shared conversations",
+      "advanced": true,
+      "help": "Off by default: Membase is used only in the owner's own direct conversations. When on, group chats and other senders can trigger recall and search (never saves)."
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "type": "string",
+        "description": "Membase developer key (mbk_...). Falls back to MEMBASE_API_KEY."
+      },
+      "baseUrl": {
+        "type": "string",
+        "description": "API base URL; defaults to MEMBASE_BASE_URL, then https://api.app.membase.ai."
+      },
+      "container": {
+        "type": "string",
+        "description": "Default container id for saves and automatic recall."
+      },
+      "recallBudgetMs": {
+        "type": "integer",
+        "minimum": 500,
+        "maximum": 60000,
+        "default": 8000,
+        "description": "Time budget for automatic recall; on expiry the turn continues without memory."
+      },
+      "autoRecall": {
+        "type": "boolean",
+        "default": true,
+        "description": "Search Membase before each user turn and inject the passages as context."
+      },
+      "autoCapture": {
+        "type": "boolean",
+        "default": false,
+        "description": "Ask the agent to save durable facts with membase_save before compaction."
+      },
+      "allowSharedConversations": {
+        "type": "boolean",
+        "default": false,
+        "description": "Allow reads (never writes) in group chats and conversations with other senders."
+      }
+    }
+  }
+}
