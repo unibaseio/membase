@@ -1,0 +1,21 @@
+[project]
+name = "unibaseio-membase-hermes"
+version = "0.1.0"
+description = "Hermes Agent memory provider plugin: Membase"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+# Installed into the Hermes venv by `hermes plugins install` / `enable` and re-applied after
+# `hermes update`. Hermes pins its own dependencies exactly; the SDK only needs httpx<1,>=0.25.
+dependencies = [
+    "unibaseio-membase>=0.3.0,<0.4",
+]
+
+[project.urls]
+Homepage = "https://membase.com"
+Documentation = "https://docs.membase.com"
+Source = "https://github.com/unibaseio/membase/tree/main/integrations/hermes"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib -p no:cacheprovider"
