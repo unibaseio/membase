@@ -1,0 +1,46 @@
+identity:
+  author: unibase
+  name: membase
+  label:
+    en_US: Membase
+    zh_Hans: Membase
+  description:
+    en_US: Long-term memory from one Membase account. Search it, save to it when the user asks, and read the user's profile.
+    zh_Hans: 来自一个 Membase 账户的长期记忆。可搜索记忆、在用户要求时保存记忆，并读取用户画像。
+  icon: icon.svg
+  tags:
+    - productivity
+    - search
+credentials_for_provider:
+  api_key:
+    type: secret-input
+    required: true
+    label:
+      en_US: Membase API key
+      zh_Hans: Membase API Key
+    placeholder:
+      en_US: mbk_...
+      zh_Hans: mbk_...
+    help:
+      en_US: A developer key from Connect › Developer keys in the Membase app. Use a Read & write key to save memories; a Read key can only search. The key belongs to one person, and every user of this workspace's apps reads and writes that person's memory.
+      zh_Hans: 在 Membase 应用的 Connect › Developer keys 中创建的开发者密钥。保存记忆需要 Read & write 密钥，Read 密钥只能搜索。密钥属于一个人，本工作区所有应用的用户都会读写这个人的记忆。
+    url: https://app.membase.com
+  base_url:
+    type: text-input
+    required: false
+    label:
+      en_US: Base URL (optional)
+      zh_Hans: Base URL（可选）
+    placeholder:
+      en_US: https://api.app.membase.com
+      zh_Hans: https://api.app.membase.com
+    help:
+      en_US: Leave empty for the Membase cloud. Only HTTPS hosts on membase.com, membase.ai or membase.io are accepted.
+      zh_Hans: 留空即使用 Membase 云服务。仅接受 membase.com、membase.ai 或 membase.io 下的 HTTPS 地址。
+tools:
+  - tools/search_memory.yaml
+  - tools/save_memory.yaml
+  - tools/get_profile.yaml
+extra:
+  python:
+    source: provider/membase.py

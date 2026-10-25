@@ -1,0 +1,55 @@
+identity:
+  name: search_memory
+  author: unibase
+  label:
+    en_US: Search memory
+    zh_Hans: 搜索记忆
+description:
+  human:
+    en_US: Find passages in the Membase memory that answer a question. Each passage names the container (Memory) it came from.
+    zh_Hans: 在 Membase 记忆中查找与问题相关的片段，每个片段都标明来自哪个容器（Memory）。
+  llm: >-
+    Search the user's long-term memory in Membase for passages relevant to a question, most relevant
+    first. Use it before answering anything that may depend on what the user said, decided or stored
+    earlier (preferences, projects, people, past decisions). Ask in natural language. Each passage
+    names its container; cite that name when you use the passage. An empty result means nothing
+    matched, unless the output says a container could not be searched. The first search after a
+    quiet spell can take up to a minute.
+parameters:
+  - name: query
+    type: string
+    required: true
+    form: llm
+    label:
+      en_US: Query
+      zh_Hans: 查询
+    human_description:
+      en_US: The question to search for, in natural language.
+      zh_Hans: 要搜索的问题，用自然语言描述。
+    llm_description: The question to search the memory for, in natural language, e.g. "what did we decide about the database".
+  - name: container
+    type: string
+    required: false
+    form: llm
+    label:
+      en_US: Container
+      zh_Hans: 容器
+    human_description:
+      en_US: Optional. The name or id of one Membase container (Memory) to search. Leave empty to search every container the key reaches.
+      zh_Hans: 可选。要搜索的 Membase 容器（Memory）的名称或 id。留空则搜索密钥可访问的全部容器。
+    llm_description: Optional name or id of one container to search. Leave empty to search all of them; only set it when the user names a specific Memory.
+  - name: limit
+    type: number
+    required: false
+    form: form
+    min: 1
+    max: 50
+    label:
+      en_US: Max passages
+      zh_Hans: 最多片段数
+    human_description:
+      en_US: Optional. How many passages to return in all (1-50). Empty lets Membase cover every container.
+      zh_Hans: 可选。总共返回多少个片段（1-50）。留空则由 Membase 覆盖每个容器。
+extra:
+  python:
+    source: tools/search_memory.py

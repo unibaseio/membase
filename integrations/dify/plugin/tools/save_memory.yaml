@@ -1,0 +1,56 @@
+identity:
+  name: save_memory
+  author: unibase
+  label:
+    en_US: Save memory
+    zh_Hans: 保存记忆
+description:
+  human:
+    en_US: Save one fact to the Membase memory, in the user's words. Needs a Read & write key.
+    zh_Hans: 用用户自己的话向 Membase 记忆保存一条事实。需要 Read & write 密钥。
+  llm: >-
+    Save one fact to the user's long-term memory in Membase. Call it only when the user asks you to
+    remember something, or plainly means it ("note that...", "from now on..."); do not save on your
+    own initiative and never save secrets such as passwords or API keys. Pass the fact in the user's
+    own words. Set static to true only for a lasting fact about the user themselves (who they are, a
+    standing preference); it then goes to their profile. Other facts go to a container; name one when
+    the user has several. A saved note becomes searchable after Membase's next learning run, not
+    immediately.
+parameters:
+  - name: content
+    type: string
+    required: true
+    form: llm
+    label:
+      en_US: Content
+      zh_Hans: 内容
+    human_description:
+      en_US: The fact to save, in the user's words.
+      zh_Hans: 要保存的事实，使用用户自己的表述。
+    llm_description: The fact to save, as the user said it. One fact per call.
+  - name: container
+    type: string
+    required: false
+    form: llm
+    label:
+      en_US: Container
+      zh_Hans: 容器
+    human_description:
+      en_US: Optional. The name or id of the Membase container (Memory) that keeps the fact. Required when the key reaches more than one; ignored when static is true.
+      zh_Hans: 可选。保存该事实的 Membase 容器（Memory）的名称或 id。密钥可访问多个容器时必填；static 为 true 时忽略。
+    llm_description: Name or id of the container that keeps the fact. Needed when the user has more than one container; if you do not know the names, call without it and the error lists them.
+  - name: static
+    type: boolean
+    required: false
+    default: false
+    form: llm
+    label:
+      en_US: Profile fact
+      zh_Hans: 画像事实
+    human_description:
+      en_US: Save as a standing fact about the user in their profile instead of a container.
+      zh_Hans: 作为关于用户的长期事实保存到用户画像，而不是容器。
+    llm_description: true only for a lasting fact about the user themselves (identity, standing preference); false for everything else.
+extra:
+  python:
+    source: tools/save_memory.py

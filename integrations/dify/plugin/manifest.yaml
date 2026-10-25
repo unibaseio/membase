@@ -1,0 +1,38 @@
+version: 0.0.1
+type: plugin
+author: unibase
+name: membase
+repo: https://github.com/unibaseio/membase/tree/main/integrations/dify
+contact: support@unibase.com
+label:
+  en_US: Membase
+  zh_Hans: Membase
+description:
+  en_US: Search, save and read a person's long-term memory in Membase from Dify agents and workflows.
+  zh_Hans: 在 Dify 的 Agent 和工作流中搜索、保存和读取 Membase 中的个人长期记忆。
+icon: icon.svg
+resource:
+  memory: 268435456
+  permission: {}
+plugins:
+  tools:
+    - provider/membase.yaml
+network:
+  domains:
+    - api.app.membase.com
+    - "*.membase.com"
+    - "*.membase.ai"
+    - "*.membase.io"
+meta:
+  version: 0.0.1
+  arch:
+    - amd64
+    - arm64
+  runner:
+    language: python
+    version: "3.12"
+    entrypoint: main
+  minimum_dify_version: 1.10.0
+created_at: 2026-10-20T00:00:00Z
+privacy: PRIVACY.md
+verified: false

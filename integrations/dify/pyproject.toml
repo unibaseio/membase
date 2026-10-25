@@ -1,0 +1,33 @@
+# Development settings only. The plugin's runtime dependencies are plugin/requirements.txt,
+# which is what Dify installs; this file is not part of the .difypkg.
+[project]
+name = "membase-dify-plugin-dev"
+version = "0.0.1"
+requires-python = ">=3.12"
+dependencies = [
+    "dify_plugin==0.9.1",
+    "unibaseio-membase==0.3.2",
+]
+
+[dependency-groups]
+dev = ["pytest>=8", "ruff>=0.6", "pyyaml>=6"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore:Monkey-patching ssl:gevent.monkey.MonkeyPatchWarning",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["membase_dify", "tools", "provider"]
