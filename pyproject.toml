@@ -4,11 +4,11 @@ dynamic = ["version"]
 description = "Membase SDK: the memory layer for AI agents, hosted or on your machine. Python client, CLI and MCP server."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "Proprietary" }
+license = { text = "MIT" }
 authors = [{ name = "Unibase" }]
 keywords = ["membase", "memory", "agent-memory", "llm-memory", "long-term-memory", "llm", "ai", "agents", "mcp"]
 classifiers = [
-    "License :: Other/Proprietary License",
+    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
