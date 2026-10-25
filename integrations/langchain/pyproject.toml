@@ -1,0 +1,66 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "langchain-membase"
+version = "0.1.0"
+description = "Membase long-term memory for LangChain and LangGraph: a retriever, agent tools and a recall middleware."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Unibase" }]
+keywords = ["langchain", "langgraph", "memory", "membase", "retriever", "agents"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "unibaseio-membase>=0.3.2",
+    "langchain-core>=1.0,<2",
+]
+
+[project.optional-dependencies]
+# MembaseRecallMiddleware plugs into `langchain.agents.create_agent` (LangChain v1).
+agents = ["langchain>=1.1,<2"]
+
+[project.urls]
+Homepage = "https://membase.com"
+Documentation = "https://github.com/unibaseio/membase/tree/main/integrations/langchain#readme"
+Repository = "https://github.com/unibaseio/membase"
+Issues = "https://github.com/unibaseio/membase/issues"
+
+[dependency-groups]
+test = [
+    "langchain>=1.1,<2",
+    "langgraph>=1.0",
+    "langchain-tests>=1.0",
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+]
+lint = ["ruff>=0.6"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/langchain_membase"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/langchain_membase", "tests", "examples", "README.md", "LICENSE", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--strict-markers"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
