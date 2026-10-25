@@ -1,6 +1,6 @@
 {
   "name": "@unibaseio/membase",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Membase memory for OpenClaw: your Membase account as the agent's memory slot, with search, save and profile tools.",
   "license": "MIT",
   "type": "module",
@@ -9,7 +9,7 @@
     "url": "git+https://github.com/unibaseio/membase.git",
     "directory": "integrations/openclaw"
   },
-  "homepage": "https://docs.membase.ai",
+  "homepage": "https://docs.membase.com",
   "keywords": [
     "openclaw",
     "openclaw-plugin",

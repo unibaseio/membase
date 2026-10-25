@@ -1,6 +1,6 @@
 # Membase for OpenClaw
 
-`@unibaseio/membase` (on ClawHub) makes your [Membase](https://membase.ai) account the memory of an
+`@unibaseio/membase` (on ClawHub) makes your [Membase](https://membase.com) account the memory of an
 [OpenClaw](https://openclaw.ai) agent. It owns OpenClaw's memory slot, recalls what you told
 other AIs before each turn, and gives the agent three tools:
 
@@ -75,7 +75,7 @@ If `apiKey` is not set, the plugin uses the `MEMBASE_API_KEY` environment variab
 | Key | Default | Meaning |
 |---|---|---|
 | `apiKey` | `MEMBASE_API_KEY` | Membase developer key (`mbk_…`). Declared as a secret input, so SecretRefs work. |
-| `baseUrl` | `https://api.app.membase.ai` | Another server, e.g. a local engine from `membase --local serve`. `MEMBASE_BASE_URL` also works. |
+| `baseUrl` | `https://api.app.membase.com` | Another server, e.g. a local engine from `membase --local serve`. `MEMBASE_BASE_URL` also works. |
 | `container` | none (all Memories in reach) | Container id that `membase_save` writes to when the model names none, and the only one automatic recall searches. |
 | `recallBudgetMs` | `8000` | How long automatic recall may wait. After that the turn continues without memory. |
 | `autoRecall` | `true` | Search before each turn you send and add the passages as context. Needs `hooks.allowConversationAccess: true`. |

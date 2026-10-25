@@ -2,14 +2,20 @@
   "id": "membase",
   "name": "Membase",
   "description": "Your Membase account as the agent's memory: time-boxed recall before each turn, plus membase_search, membase_save (only when asked) and membase_profile tools. One API key is one person's memory.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "kind": "memory",
-  "categories": ["memory"],
+  "categories": [
+    "memory"
+  ],
   "activation": {
     "onStartup": true
   },
   "contracts": {
-    "tools": ["membase_search", "membase_save", "membase_profile"]
+    "tools": [
+      "membase_search",
+      "membase_save",
+      "membase_profile"
+    ]
   },
   "configContracts": {
     "secretInputs": {
@@ -31,7 +37,7 @@
     },
     "baseUrl": {
       "label": "API base URL",
-      "placeholder": "https://api.app.membase.ai",
+      "placeholder": "https://api.app.membase.com",
       "advanced": true,
       "help": "Only for a self-hosted or local Membase server (membase --local serve)."
     },
@@ -70,7 +76,7 @@
       },
       "baseUrl": {
         "type": "string",
-        "description": "API base URL; defaults to MEMBASE_BASE_URL, then https://api.app.membase.ai."
+        "description": "API base URL; defaults to MEMBASE_BASE_URL, then https://api.app.membase.com."
       },
       "container": {
         "type": "string",

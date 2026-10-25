@@ -13,7 +13,7 @@ export const CONFIG_JSON_SCHEMA = {
     },
     baseUrl: {
       type: "string",
-      description: "API base URL; defaults to MEMBASE_BASE_URL, then https://api.app.membase.ai.",
+      description: "API base URL; defaults to MEMBASE_BASE_URL, then https://api.app.membase.com.",
     },
     container: {
       type: "string",

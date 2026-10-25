@@ -15,6 +15,8 @@ import {
 } from "membase-sdk";
 import type { MembasePluginConfig } from "./config.js";
 
+export const DEFAULT_BASE_URL = "https://api.app.membase.com";
+
 /** How the plugin gets its Membase client. */
 export interface MembaseClientOptions {
   /** A ready client (one person's key). Automatic recall still runs under the recall budget. */
@@ -61,10 +63,12 @@ export class MembaseClients {
   }
 
   private build(extra: { timeoutMs?: number; maxRetries?: number }): Membase {
+    // The plugin's own default, so it does not depend on which SDK release is installed.
+    const baseUrl = this.config.baseUrl || process.env.MEMBASE_BASE_URL || DEFAULT_BASE_URL;
     try {
       return new Membase({
         ...(this.config.apiKey ? { apiKey: this.config.apiKey } : {}),
-        ...(this.config.baseUrl ? { baseUrl: this.config.baseUrl } : {}),
+        baseUrl,
         ...(this.options.fetch ? { fetch: this.options.fetch } : {}),
         ...extra,
       });
