@@ -1,0 +1,18 @@
+name: unibaseio-membase
+version: "0.1.0"
+description: "Membase hosted memory: recalls passages from the user's Membase Memories before each turn (time-boxed, fail-open) and adds membase_search, membase_save and membase_profile. One API key per profile = one person."
+author: Unibase
+license: MIT
+homepage: https://github.com/unibaseio/membase/tree/main/integrations/hermes
+tags: [memory, hosted, semantic-search]
+requires_hermes: ">=0.22.2"
+kind: exclusive  # one memory provider at a time (Hermes infers it too)
+# The provider's tools (membase_search, membase_save, membase_profile) come from
+# MemoryProvider.get_tool_schemas(), not from register(ctx).
+provides_tools: []
+provides_hooks: []
+requires_env:
+  - name: MEMBASE_API_KEY
+    description: "Membase developer key (Membase app > Connect > Developer keys; Read & write to let the agent save)"
+    url: https://app.membase.com
+    secret: true

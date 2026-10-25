@@ -5,6 +5,7 @@ package, tests and README.
 
 | Folder | Framework | Package | Install |
 |---|---|---|---|
+| [`hermes/`](hermes) | Hermes Agent | Hermes plugin `unibaseio-membase` | `hermes plugins install unibaseio/membase/integrations/hermes` |
 | [`openclaw/`](openclaw) | OpenClaw | `@unibaseio/membase` on [ClawHub](https://clawhub.ai/unibaseio/plugins/membase) | `openclaw plugins install clawhub:@unibaseio/membase` |
 
 ## What every integration does the same way
