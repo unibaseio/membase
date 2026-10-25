@@ -8,6 +8,7 @@ package, tests and README.
 | [`agent-framework/`](agent-framework) | Microsoft Agent Framework (Python) | `agent-framework-membase` on PyPI | `pip install agent-framework-membase` |
 | [`dify/`](dify) | Dify | Dify plugin `unibase/membase` | Dify › Plugins › Marketplace, search Membase (once listed) |
 | [`hermes/`](hermes) | Hermes Agent | Hermes plugin `unibaseio-membase` | `hermes plugins install unibaseio/membase/integrations/hermes` |
+| [`langchain/`](langchain) | LangChain / LangGraph (Python) | `langchain-membase` on PyPI | `pip install langchain-membase` |
 | [`openclaw/`](openclaw) | OpenClaw | `@unibaseio/membase` on [ClawHub](https://clawhub.ai/unibaseio/plugins/membase) | `openclaw plugins install clawhub:@unibaseio/membase` |
 | [`strands/`](strands) | Strands Agents (Python) | `membase-strands` on PyPI | `pip install membase-strands` |
 

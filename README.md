@@ -121,7 +121,7 @@ Cursor, Codex and other clients: [Connect your AI](https://docs.membase.com/conn
 - [Memory operations](https://docs.membase.com/build/guides/memory-operations/): containers, documents, memories, profile, ask
 - [Authentication](https://docs.membase.com/build/reference/authentication/): keys and what each one can reach
 - [Connect your AI](https://docs.membase.com/connect/): per-client MCP setup
-- [Agent framework integrations](integrations/): Microsoft Agent Framework, Dify, Hermes Agent, OpenClaw and Strands Agents
+- [Agent framework integrations](integrations/): LangChain, Microsoft Agent Framework, Dify, Hermes Agent, OpenClaw and Strands Agents
 - [Local engine](https://github.com/unibaseio/membase-ai/blob/main/docs/reference.md): what it stores, `membase serve`, settings
 
 ## License
