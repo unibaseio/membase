@@ -9,6 +9,7 @@ package, tests and README.
 | [`dify/`](dify) | Dify | Dify plugin `unibase/membase` | Dify › Plugins › Marketplace, search Membase (once listed) |
 | [`hermes/`](hermes) | Hermes Agent | Hermes plugin `unibaseio-membase` | `hermes plugins install unibaseio/membase/integrations/hermes` |
 | [`openclaw/`](openclaw) | OpenClaw | `@unibaseio/membase` on [ClawHub](https://clawhub.ai/unibaseio/plugins/membase) | `openclaw plugins install clawhub:@unibaseio/membase` |
+| [`strands/`](strands) | Strands Agents (Python) | `membase-strands` on PyPI | `pip install membase-strands` |
 
 ## What every integration does the same way
 
