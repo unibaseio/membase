@@ -1,0 +1,29 @@
+identity:
+  name: get_profile
+  author: unibase
+  label:
+    en_US: Get user profile
+    zh_Hans: 获取用户画像
+description:
+  human:
+    en_US: Read the user's Membase profile, the standing facts about who they are and what recently changed. Works only if the key's owner granted the profile.
+    zh_Hans: 读取用户的 Membase 画像：关于其身份的长期事实和最近变化的事实。仅当密钥所有者授权了画像时可用。
+  llm: >-
+    Read the user's profile from Membase: standing facts about who they are and lasting preferences,
+    plus the most recently changed facts. Call it once near the start of a conversation, not on every
+    turn. With a topic, it also returns passages relevant to that topic.
+parameters:
+  - name: query
+    type: string
+    required: false
+    form: llm
+    label:
+      en_US: Topic
+      zh_Hans: 话题
+    human_description:
+      en_US: Optional. The current topic, to also return passages relevant to it.
+      zh_Hans: 可选。当前话题，用于同时返回相关片段。
+    llm_description: Optional current topic of the conversation; leave empty for the profile alone.
+extra:
+  python:
+    source: tools/get_profile.py

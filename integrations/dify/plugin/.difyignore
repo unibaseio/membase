@@ -1,0 +1,10 @@
+# Only runtime files go into the .difypkg.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.env
+.env.*
+.DS_Store
+*.difypkg
