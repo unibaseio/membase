@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase-ai/main/assets/membase-logo.png" width="72" alt="Membase">
+  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/membase-logo.png" width="72" alt="Membase">
 </p>
 
 <h1 align="center">@unibaseio/membase-cli</h1>
@@ -13,7 +13,7 @@
   <a href="https://membase.com">Website</a> ·
   <a href="https://docs.membase.com">Docs</a> ·
   <a href="https://app.membase.com">Web app</a> ·
-  <a href="https://github.com/unibaseio/membase-ai">GitHub</a> ·
+  <a href="https://github.com/unibaseio/membase">GitHub</a> ·
   <a href="https://discord.gg/nB9EfPGsSf">Discord</a>
 </p>
 
