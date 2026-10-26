@@ -50,6 +50,24 @@ def _ask(b: LocalBackend, q: _Query, body: _Body, _m) -> Any:
     return b.ask(body.get("message") or "", model=body.get("model"))
 
 
+def _add_media(b: LocalBackend, q: _Query, body: _Body, _m) -> Any:
+    body = _only(body, {"container", "path", "url", "title", "custom_id"})
+    return b.media.add(
+        body.get("container"), path=body.get("path"), url=body.get("url"),
+        title=body.get("title") or "", custom_id=body.get("custom_id") or "",
+    )
+
+
+def _search_media(b: LocalBackend, q: _Query, body: _Body, _m) -> Any:
+    body = _only(body, {"q", "container", "kind", "limit"})
+    return b.media.search(body.get("q") or "", body.get("container"), body.get("kind"), body.get("limit"))
+
+
+def _ask_media(b: LocalBackend, q: _Query, body: _Body, _m) -> Any:
+    body = _only(body, {"message", "container"})
+    return b.media.ask(body.get("message") or "", body.get("container"))
+
+
 ROUTES: list[tuple[str, re.Pattern, Callable[..., Any], int]] = [
     ("GET", re.compile(r"^/v1/containers$"), lambda b, q, body, m: b.containers(), 200),
     ("POST", re.compile(r"^/v1/search$"), _search, 200),
@@ -64,6 +82,14 @@ ROUTES: list[tuple[str, re.Pattern, Callable[..., Any], int]] = [
     ("DELETE", re.compile(r"^/v1/memories/(?P<id>[^/]+)$"),
      lambda b, q, body, m: b.forget_memory(m["id"], q.get("container"), _truthy(q.get("confirm"))), 200),
     ("POST", re.compile(r"^/v1/ask$"), _ask, 200),
+    # Media memory (local only for now): its own store, search and ask.
+    ("POST", re.compile(r"^/v1/media$"), _add_media, 202),
+    ("GET", re.compile(r"^/v1/media$"), lambda b, q, body, m: b.media.list(q.get("container")), 200),
+    ("POST", re.compile(r"^/v1/media/search$"), _search_media, 200),
+    ("POST", re.compile(r"^/v1/media/ask$"), _ask_media, 200),
+    ("GET", re.compile(r"^/v1/media/(?P<id>[^/]+)$"), lambda b, q, body, m: b.media.get(m["id"]), 200),
+    ("DELETE", re.compile(r"^/v1/media/(?P<id>[^/]+)$"),
+     lambda b, q, body, m: b.media.delete(m["id"], _truthy(q.get("confirm"))), 200),
 ]
 
 

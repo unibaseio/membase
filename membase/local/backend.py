@@ -44,6 +44,7 @@ class LocalBackend:
         self._engines: dict[str, Any] = {}
         self._locks: dict[str, threading.RLock] = {}
         self._guard = threading.Lock()
+        self._media = None
 
 
     def _dir(self, cid: str) -> Path:
@@ -122,11 +123,22 @@ class LocalBackend:
                 self._locks[cid] = threading.RLock()
             return self._engines[cid], self._locks[cid]
 
+    @property
+    def media(self):
+        """Media memory (photos, videos, audio): its own engines, search and ask."""
+        if self._media is None:
+            from .media import LocalMedia
+
+            self._media = LocalMedia(self)
+        return self._media
+
     def close(self) -> None:
         with self._guard:
             for e in self._engines.values():
                 e.close()
             self._engines.clear()
+        if self._media is not None:
+            self._media.close()
 
     def containers(self) -> dict:
         return {"containers": [self._meta(cid) for cid in self._ids()]}

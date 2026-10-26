@@ -40,6 +40,44 @@ the current directory or a parent.
 
 `MEMBASE_LOCAL=1` makes local the default when `MEMBASE_API_KEY` is not set.
 
+## Media memory
+
+`pip install 'unibaseio-membase[media]'` adds photos, videos and audio recordings, kept apart from
+documents and memories: they have their own routes, search and ask, and `/v1/search` and `/v1/ask`
+do not read them. Local only for now (in process, or `membase serve`). The extra brings torch for
+CLIP; install the CPU build first (`pip install torch --index-url https://download.pytorch.org/whl/cpu`)
+unless you want CUDA. CLIP's weights (~1.2GB) download on first use.
+
+An image becomes a caption and a CLIP vector. A video is cut into shots (caption, time span, thumbnail
+each) and its sound track into speaker turns matched to the person on screen; an audio file into
+speaker turns. Search runs in any language over captions, speech and the pictures themselves.
+
+| Route | Python | MCP tool | Command line |
+|---|---|---|---|
+| `POST /v1/media` `{path \| url, container?, title?, custom_id?}` | `m.media.add(path, url=, container=)` | `add_media` | `media add FILE \| --url` |
+| `GET /v1/media?container=` | `m.media.list()` | `list_media` | `media list` |
+| `GET /v1/media/{id}` | `m.media.get(id)` | `get_media` | `media get ID` |
+| `DELETE /v1/media/{id}?confirm=` | `m.media.delete(id, confirm=)` | `delete_media` | `media delete ID [--confirm]` |
+| `POST /v1/media/search` `{q, container?, kind?, limit?}` | `m.media.search(q, kind=)` | `search_media` | `media search Q [--kind]` |
+| `POST /v1/media/ask` `{message, container?}` | `m.media.ask(message)` | `ask_media` | `media ask MESSAGE` |
+
+`path` is a file on the machine running the engine. Items and moments report `path` and `thumb` as
+files under the container's `media/` directory. `add` returns once the item is processed, which takes
+minutes for a long video. The MCP tools appear only for local memory with the extra installed.
+
+| Setting | Default | |
+|---|---|---|
+| `MEMBASE_MEDIA_CAPTION_MODEL` | `gpt-4o-mini` | image and shot captions |
+| `MEMBASE_MEDIA_SUMMARY_MODEL` | `gpt-4o-mini` | video and recording summaries |
+| `MEMBASE_MEDIA_RERANK_MODEL` | `gpt-4o-mini` | query translation, grading search results |
+| `MEMBASE_MEDIA_ASK_MODEL` | `gpt-4.1` | `media ask` answers |
+| `MEMBASE_MEDIA_SPEAKER_MODEL` | `gpt-4.1` | matching voices to people on screen |
+| `MEMBASE_MEDIA_TRANSCRIBE_MODEL` | `gpt-4o-transcribe-diarize` | speech with speakers |
+| `MEMBASE_MEDIA_VISUAL_MODEL` | `hf-hub:UCSC-VLAA/openvision-vit-large-patch14-224` | CLIP |
+
+Captions and transcription need an OpenAI-compatible API (`OPENAI_API_KEY`, or `openai-compat` with
+`MEMBASE_LLM_ENDPOINT`); the rest uses the chat and embedding providers above.
+
 ## Repository
 
 `membase/` is the Python package (`client.py`, `cli.py`, `local/` for local memory and `membase serve`,
