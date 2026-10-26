@@ -2,7 +2,7 @@
 
 import { APIConnectionError, APITimeoutError, errorFor } from "./errors.js";
 
-export const VERSION = "0.3.1";
+export const VERSION = "0.3.2";
 export const DEFAULT_BASE_URL = "https://api.app.membase.com";
 /** The first search after a quiet spell can take up to a minute while the memory wakes. */
 export const DEFAULT_TIMEOUT_MS = 90_000;
