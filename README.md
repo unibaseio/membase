@@ -97,7 +97,7 @@ membase --local import ~/Downloads/claude-export.json     # Claude, ChatGPT, mar
 membase --local agent ingest trace.json --agent coder
 membase --local agent search "fix flaky deploy" --agent coder
 membase --local media add ~/Movies/trip.mp4                # shots, speech and speakers
-membase --local media search "有人在滑雪"
+membase --local media search "someone skiing"   # any language
 ```
 
 Without `--local` (or `--store DIR`, both before the command) commands use the hosted API; `agent`,
