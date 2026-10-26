@@ -13,7 +13,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-pytest.importorskip("membase_core.media", reason="needs the media extra (unibaseio-membase-core[media])")
+pytest.importorskip("membase_media", reason="needs the media extra (unibaseio-membase-core[media])")
 
 from membase import (  # noqa: E402
     BadRequestError,
@@ -25,7 +25,7 @@ from membase import (  # noqa: E402
 )
 from membase.local.server import make_server  # noqa: E402
 from membase.requirements import INSTALL_MEDIA, media_unavailable  # noqa: E402
-from membase_core.media import MediaConfig  # noqa: E402
+from membase_media import MediaConfig  # noqa: E402
 
 COLORS = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255)}
 
@@ -111,7 +111,7 @@ def _png(tmp_path, color: str, name: str):
 
 def _has_ffmpeg() -> bool:
     try:
-        from membase_core.media.video import ffmpeg_exe
+        from membase_media.video import ffmpeg_exe
 
         ffmpeg_exe()
         return True
@@ -208,7 +208,7 @@ def test_containers_keep_their_own_media(local, tmp_path):
 
 @pytest.mark.skipif(not _has_ffmpeg(), reason="needs ffmpeg or imageio-ffmpeg")
 def test_a_video_has_moments_with_thumbnails(local, llm, tmp_path):
-    from membase_core.media.video import ffmpeg
+    from membase_media.video import ffmpeg
 
     video = tmp_path / "clip.mp4"
     ffmpeg("-f", "lavfi", "-i", "color=c=red:s=160x120:d=3:r=10",

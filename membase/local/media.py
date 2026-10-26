@@ -1,5 +1,5 @@
 """Media memory on this machine: photos, videos and audio per container, over the engine's
-``membase_core.media`` (the ``[media]`` extra). Separate from documents and memories, with its own
+``membase_media`` (the ``[media]`` extra). Separate from documents and memories, with its own
 search and ask."""
 
 from __future__ import annotations
@@ -59,9 +59,9 @@ class LocalMedia:
         with self._guard:
             if cid not in self._engines:
                 try:
-                    from membase_core.media import MediaConfig, MediaMemoryEngine
-                    from membase_core.media.clip import Clip
-                    from membase_core.media.llm import MediaLLM
+                    from membase_media import MediaConfig, MediaMemoryEngine
+                    from membase_media.clip import Clip
+                    from membase_media.llm import MediaLLM
                 except ImportError as e:  # pragma: no cover - depends on the install
                     self._require()
                     raise LocalError(422, "capability_unavailable", str(e)) from e
@@ -134,7 +134,7 @@ class LocalMedia:
             title: str = "", custom_id: str = "") -> dict:
         if (path is None) == (url is None):
             raise LocalError(400, "bad_request", "give exactly one of path and url")
-        from membase_core.media import kind_of
+        from membase_media import kind_of
 
         self._require()
         with tempfile.TemporaryDirectory() as tmp:
