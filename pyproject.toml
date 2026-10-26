@@ -37,7 +37,7 @@ membase = "membase.cli:main"
 [project.urls]
 Homepage = "https://membase.com"
 Documentation = "https://docs.membase.com"
-Repository = "https://github.com/unibaseio/membase-ai"
+Repository = "https://github.com/unibaseio/membase"
 
 [build-system]
 requires = ["hatchling<1.28"]

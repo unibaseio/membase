@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase-ai/main/assets/membase-logo.png" width="72" alt="Membase">
+  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/membase-logo.png" width="72" alt="Membase">
 </p>
 
 <h1 align="center">Membase</h1>
@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase-ai/main/assets/hero.svg" width="840" alt="Add sources, manage one memory, use it from every AI and app">
+  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/hero.svg" width="840" alt="Add sources, manage one memory, use it from every AI and app">
 </p>
 
 Membase is the memory layer for AI agents. It keeps one memory for everything you and your agents
@@ -43,16 +43,16 @@ and an MCP server. The memory lives in your Membase account, which the
 ## Write once, read from any AI
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase-ai/main/assets/in-action.svg" width="840" alt="Your app writes a memory; any AI reads it, here Claude Code">
+  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/in-action.svg" width="840" alt="Your app writes a memory; any AI reads it, here Claude Code">
 </p>
 
-Recordings: [Python SDK](https://github.com/unibaseio/membase-ai/blob/main/assets/videos/sdk.mp4) (57 s) ·
-[Claude Code](https://github.com/unibaseio/membase-ai/blob/main/assets/videos/switch-ai.mp4) (1 min 33 s). The answer above is illustrative.
+Recordings: [Python SDK](https://github.com/unibaseio/membase/blob/main/assets/videos/sdk.mp4) (57 s) ·
+[Claude Code](https://github.com/unibaseio/membase/blob/main/assets/videos/switch-ai.mp4) (1 min 33 s). The answer above is illustrative.
 
 ## Accuracy
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase-ai/main/assets/results.svg" width="840" alt="LoCoMo 93.1%, LongMemEval_S 92.6%, DMR 92.2%">
+  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/results.svg" width="840" alt="LoCoMo 93.1%, LongMemEval_S 92.6%, DMR 92.2%">
 </p>
 
 93.1% on LoCoMo, 92.6% on LongMemEval_S and 92.2% on DMR, using about 3× fewer tokens than the full
@@ -61,7 +61,7 @@ history on LoCoMo and 11× fewer on LongMemEval_S. Method and results: [membase.
 ## Quickstart
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase-ai/main/assets/architecture.svg" width="840" alt="Hosted, local in process, or local over HTTP">
+  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/architecture.svg" width="840" alt="Hosted, local in process, or local over HTTP">
 </p>
 
 ```bash
@@ -103,7 +103,7 @@ Without `--local` (or `--store DIR`, both before the command) commands use the h
 ## MCP
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase-ai/main/assets/mcp.svg" width="840" alt="MCP clients, hosted or local server, same tools">
+  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/mcp.svg" width="840" alt="MCP clients, hosted or local server, same tools">
 </p>
 
 ```bash
@@ -122,7 +122,7 @@ Cursor, Codex and other clients: [Connect your AI](https://docs.membase.com/conn
 - [Authentication](https://docs.membase.com/build/reference/authentication/): keys and what each one can reach
 - [Connect your AI](https://docs.membase.com/connect/): per-client MCP setup
 - [Agent framework integrations](integrations/): LangChain, Microsoft Agent Framework, Dify, Hermes Agent, OpenClaw and Strands Agents
-- [Local engine](https://github.com/unibaseio/membase-ai/blob/main/docs/reference.md): what it stores, `membase serve`, settings
+- [Local engine](https://github.com/unibaseio/membase/blob/main/docs/reference.md): what it stores, `membase serve`, settings
 
 ## License
 
