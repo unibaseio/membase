@@ -27,8 +27,6 @@ local = [
     "unibaseio-membase-core[all]>=0.3.0; python_version >= '3.12'",
     "mcp>=1.0,<2",
 ]
-# Media memory (photos, videos, audio): everything in [local], plus the engine's media extra,
-# which brings torch for CLIP.
 media = [
     "unibaseio-membase-core[all,media]>=0.4.0; python_version >= '3.12'",
     "mcp>=1.0,<2",

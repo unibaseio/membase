@@ -7,7 +7,6 @@ from typing import Any, Callable
 
 
 def _only(body: dict, allowed: set[str]) -> dict:
-    # Imported here: local/routes.py imports this module to mount ROUTES.
     from ..local.routes import _only
 
     return _only(body, allowed)

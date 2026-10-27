@@ -78,7 +78,6 @@ class FakeClip:
 
 @pytest.fixture
 def media_ready(monkeypatch):
-    # The engine's media modules are installed; CLIP itself is stood in for below.
     monkeypatch.setattr(requirements, "media_unavailable", lambda: None)
 
 
@@ -165,7 +164,6 @@ def test_custom_ids_and_delete_with_confirmation(local, tmp_path):
     assert not __import__("os").path.exists(path)
     with pytest.raises(NotFoundError):
         local.media.get(first["media_id"])
-    # The id is free again once its item is gone.
     assert local.media.add(_png(tmp_path, "red", "r.png"), custom_id="card-1")["status"] == "stored"
 
 
@@ -229,7 +227,7 @@ def test_media_needs_its_extra(tmp_path, monkeypatch):
 
     monkeypatch.setattr(requirements, "media_unavailable", lambda: f"media memory needs ...: {INSTALL_MEDIA}")
     with Membase(local=tmp_path / "s") as m:
-        assert m.media.list() == {"media": []}  # nothing stored, nothing to load
+        assert m.media.list() == {"media": []}
         with pytest.raises(UnprocessableEntityError, match=re.escape(INSTALL_MEDIA)):
             m.media.add(_png(tmp_path, "red", "r.png"))
 

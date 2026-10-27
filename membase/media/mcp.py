@@ -20,7 +20,7 @@ def enabled(client: Membase | Callable[[], Membase]) -> bool:
 
     if not isinstance(client, Membase):
         return False
-    local = getattr(client._http._transport, "backend", None) is not None  # noqa: SLF001
+    local = getattr(client._http._transport, "backend", None) is not None
     return local and media_unavailable() is None
 
 

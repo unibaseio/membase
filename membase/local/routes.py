@@ -66,7 +66,6 @@ ROUTES: list[tuple[str, re.Pattern, Callable[..., Any], int]] = [
     ("POST", re.compile(r"^/v1/ask$"), _ask, 200),
 ]
 
-# Media memory keeps its routes in its own package.
 from ..media.routes import ROUTES as _MEDIA_ROUTES  # noqa: E402
 
 ROUTES += _MEDIA_ROUTES

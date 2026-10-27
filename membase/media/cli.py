@@ -36,7 +36,7 @@ def add_parser(sub: Any) -> None:
 
 
 def run(args: argparse.Namespace, m: Membase) -> Any:
-    local = getattr(m._http._transport, "backend", None) is not None  # noqa: SLF001
+    local = getattr(m._http._transport, "backend", None) is not None
     if not local and m.base_url == DEFAULT_BASE_URL:
         raise SystemExit("media memory is local for now: use membase --local media ...")
     if args.media_cmd == "add":

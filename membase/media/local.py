@@ -37,7 +37,6 @@ class LocalMedia:
         self.b = backend
         self._engines: dict[str, Any] = {}
         self._guard = threading.Lock()
-        # One config, model client and CLIP (~1.2GB) for every container's engine.
         self._shared: tuple[Any, Any, Any] | None = None
 
     def _dir(self, cid: str) -> Path:
@@ -62,7 +61,7 @@ class LocalMedia:
                     from membase_media import MediaConfig, MediaMemoryEngine
                     from membase_media.clip import Clip
                     from membase_media.llm import MediaLLM
-                except ImportError as e:  # pragma: no cover - depends on the install
+                except ImportError as e:
                     self._require()
                     raise LocalError(422, "capability_unavailable", str(e)) from e
                 if self._shared is None:
@@ -77,8 +76,6 @@ class LocalMedia:
             for e in self._engines.values():
                 e.close()
             self._engines.clear()
-
-    # ------------------------------------------------------------------ shapes
 
     def _custom_ids_path(self, cid: str) -> Path:
         return self._dir(cid) / "custom_ids.json"
@@ -127,8 +124,6 @@ class LocalMedia:
                 if d["id"] == media_id:
                     return cid, engine, d
         raise LocalError(404, "not_found", "media not found", {"media_id": media_id})
-
-    # --------------------------------------------------------------- operations
 
     def add(self, container: str | None, path: str | None = None, url: str | None = None,
             title: str = "", custom_id: str = "") -> dict:
@@ -230,7 +225,7 @@ class LocalMedia:
                 answers.append((cid, hits, None))
             except LocalError:
                 raise
-            except Exception as e:  # noqa: BLE001 - one container failing is reported beside the rest
+            except Exception as e:
                 answers.append((cid, [], f"{type(e).__name__}: {e}"))
         results: list[dict] = []
         for rank in range(max((len(h) for _, h, _ in answers), default=0)):
