@@ -67,7 +67,7 @@ history on LoCoMo and 11× fewer on LongMemEval_S. Method and results: [membase.
 ```bash
 pip install unibaseio-membase              # hosted · Python 3.10+ · needs MEMBASE_API_KEY
 pip install 'unibaseio-membase[local]'     # local  · Python 3.12 or 3.13 · needs OPENAI_API_KEY
-pip install 'unibaseio-membase[media]'     # local + photos, videos and audio (brings torch)
+pip install 'unibaseio-membase[media]'     # local + photos, videos and audio
 npm install @unibaseio/membase              # TypeScript · Node 18+
 npm install -g @unibaseio/membase-cli       # the `membase` command (hosted) without Python
 ```

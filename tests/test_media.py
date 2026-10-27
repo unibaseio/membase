@@ -1,5 +1,5 @@
 """Media memory over the local routes, offline: the engine's real store, indexes and ffmpeg steps,
-with stand-ins for the model calls and CLIP."""
+with stand-ins for the model calls."""
 
 from __future__ import annotations
 
@@ -64,18 +64,6 @@ class FakeLLM:
         return {"relevant": [1], "answer": "from media memory"}
 
 
-class FakeClip:
-    def _vec(self, color: str) -> np.ndarray:
-        v = np.array(COLORS[color] + (1,) * 5, dtype=np.float32)
-        return v / np.linalg.norm(v)
-
-    def encode_images(self, images):
-        return np.stack([self._vec(FakeLLM().caption(im).split()[2]) for im in images])
-
-    def encode_text(self, text):
-        return self._vec(next((c for c in COLORS if c in text.lower()), "green"))
-
-
 @pytest.fixture
 def media_ready(monkeypatch):
     monkeypatch.setattr(requirements, "media_unavailable", lambda: None)
@@ -89,7 +77,7 @@ def llm():
 @pytest.fixture
 def local(tmp_path, media_ready, llm):
     m = Membase(local=tmp_path / "store")
-    m._http._transport.backend.media._shared = (MediaConfig(), llm, FakeClip())
+    m._http._transport.backend.media._shared = (MediaConfig(), llm)
     yield m
     m.close()
 
@@ -132,7 +120,7 @@ def test_add_list_get_search_ask(local, tmp_path):
 
     hits = local.media.search("red square")
     assert hits["results"][0]["id"] == out["media_id"]
-    assert set(hits["results"][0]["channels"]) == {"semantic", "keyword", "visual"}
+    assert set(hits["results"][0]["channels"]) == {"semantic", "keyword"}
     assert hits["containers"] == [{"id": "default", "name": "default"}]
     assert local.media.search("red", kind="video")["results"] == []
 
@@ -220,7 +208,7 @@ def test_a_video_has_moments_with_thumbnails(local, llm, tmp_path):
 
 
 def test_media_needs_its_extra(tmp_path, monkeypatch):
-    reason = media_unavailable((3, 13), find=lambda name: None if name == "open_clip" else object())
+    reason = media_unavailable((3, 13), find=lambda name: None if name == "membase_media" else object())
     assert INSTALL_MEDIA in reason
     assert "Python 3.12" in media_unavailable((3, 11), find=lambda name: object())
     assert media_unavailable((3, 13), find=lambda name: object()) is None
@@ -238,7 +226,7 @@ def test_cli_media_commands(tmp_path, capsys, media_ready, monkeypatch, llm):
     real_engine = LocalMedia.engine
 
     def engine(self, cid):
-        self._shared = self._shared or (MediaConfig(), llm, FakeClip())
+        self._shared = self._shared or (MediaConfig(), llm)
         return real_engine(self, cid)
 
     monkeypatch.setattr(LocalMedia, "engine", engine)
@@ -260,7 +248,7 @@ def test_cli_media_is_local_only(monkeypatch):
 
 def test_the_http_server_answers_the_media_routes(tmp_path, media_ready, llm):
     httpd = make_server(port=0, root=str(tmp_path / "srv"))
-    httpd.backend.media._shared = (MediaConfig(), llm, FakeClip())
+    httpd.backend.media._shared = (MediaConfig(), llm)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     try:
         remote = Membase("local", base_url=f"http://127.0.0.1:{httpd.server_address[1]}", max_retries=0)

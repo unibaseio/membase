@@ -19,6 +19,6 @@ def media_unavailable(
     reason = local_unavailable(version, find)
     if reason:
         return reason.replace(INSTALL_LOCAL, INSTALL_MEDIA).replace("local memory", "media memory")
-    if find("membase_media") is None or find("open_clip") is None:
-        return f"media memory needs the engine's media extra (CLIP, ffmpeg): {INSTALL_MEDIA}"
+    if find("membase_media") is None or find("PIL") is None:
+        return f"media memory needs the engine's media extra: {INSTALL_MEDIA}"
     return None

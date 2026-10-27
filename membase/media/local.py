@@ -37,7 +37,7 @@ class LocalMedia:
         self.b = backend
         self._engines: dict[str, Any] = {}
         self._guard = threading.Lock()
-        self._shared: tuple[Any, Any, Any] | None = None
+        self._shared: tuple[Any, Any] | None = None
 
     def _dir(self, cid: str) -> Path:
         return self.b._dir(cid) / "media"
@@ -59,16 +59,15 @@ class LocalMedia:
             if cid not in self._engines:
                 try:
                     from membase_media import MediaConfig, MediaMemoryEngine
-                    from membase_media.clip import Clip
                     from membase_media.llm import MediaLLM
                 except ImportError as e:
                     self._require()
                     raise LocalError(422, "capability_unavailable", str(e)) from e
                 if self._shared is None:
                     cfg = MediaConfig.from_env()
-                    self._shared = (cfg, MediaLLM(cfg), Clip(cfg.visual_model))
-                cfg, llm, clip = self._shared
-                self._engines[cid] = MediaMemoryEngine(self._dir(cid), config=cfg, llm=llm, clip=clip)
+                    self._shared = (cfg, MediaLLM(cfg))
+                cfg, llm = self._shared
+                self._engines[cid] = MediaMemoryEngine(self._dir(cid), config=cfg, llm=llm)
             return self._engines[cid]
 
     def close(self) -> None:

@@ -44,13 +44,12 @@ the current directory or a parent.
 
 `pip install 'unibaseio-membase[media]'` adds photos, videos and audio recordings, kept apart from
 documents and memories: they have their own routes, search and ask, and `/v1/search` and `/v1/ask`
-do not read them. Local only for now (in process, or `membase serve`). The extra brings torch for
-CLIP; install the CPU build first (`pip install torch --index-url https://download.pytorch.org/whl/cpu`)
-unless you want CUDA. CLIP's weights (~1.2GB) download on first use.
+do not read them. Local only for now (in process, or `membase serve`). It needs only a model
+provider key: no local model is downloaded.
 
-An image becomes a caption and a CLIP vector. A video is cut into shots (caption, time span, thumbnail
-each) and its sound track into speaker turns matched to the person on screen; an audio file into
-speaker turns. Search runs in any language over captions, speech and the pictures themselves.
+An image becomes a caption. A video is cut into shots (caption, time span, thumbnail each) and its
+sound track into speaker turns matched to the person on screen; an audio file into speaker turns.
+Search runs in any language over captions and speech.
 
 | Route | Python | MCP tool | Command line |
 |---|---|---|---|
@@ -73,7 +72,6 @@ minutes for a long video. The MCP tools appear only for local memory with the ex
 | `MEMBASE_MEDIA_ASK_MODEL` | `gpt-4.1` | `media ask` answers |
 | `MEMBASE_MEDIA_SPEAKER_MODEL` | `gpt-4.1` | matching voices to people on screen |
 | `MEMBASE_MEDIA_TRANSCRIBE_MODEL` | `gpt-4o-transcribe-diarize` | speech with speakers |
-| `MEMBASE_MEDIA_VISUAL_MODEL` | `hf-hub:UCSC-VLAA/openvision-vit-large-patch14-224` | CLIP |
 
 Captions and transcription need an OpenAI-compatible API (`OPENAI_API_KEY`, or `openai-compat` with
 `MEMBASE_LLM_ENDPOINT`); the rest uses the chat and embedding providers above.
