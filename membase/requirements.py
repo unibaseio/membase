@@ -9,7 +9,6 @@ from typing import Callable
 from .errors import MembaseError
 
 INSTALL_LOCAL = "pip install 'unibaseio-membase[local]'"
-INSTALL_MEDIA = "pip install 'unibaseio-membase[media]'"
 HOSTED_MCP_URL = "https://api.app.membase.com/mcp-http"
 
 
@@ -32,19 +31,6 @@ def local_unavailable(
     return None
 
 
-def media_unavailable(
-    version: tuple[int, ...] = tuple(sys.version_info[:2]),
-    find: Callable[[str], object] = importlib.util.find_spec,
-) -> str | None:
-    """Why media memory cannot run here, or None when it can."""
-    reason = local_unavailable(version, find)
-    if reason:
-        return reason.replace(INSTALL_LOCAL, INSTALL_MEDIA).replace("local memory", "media memory")
-    if find("membase_media") is None or find("open_clip") is None:
-        return f"media memory needs the engine's media extra (CLIP, ffmpeg): {INSTALL_MEDIA}"
-    return None
-
-
 def mcp_unavailable(find: Callable[[str], object] = importlib.util.find_spec) -> str | None:
     """Why ``membase mcp`` cannot run here, or None when it can."""
     if find("mcp") is None:
@@ -57,12 +43,6 @@ def mcp_unavailable(find: Callable[[str], object] = importlib.util.find_spec) ->
 
 def require_local() -> None:
     reason = local_unavailable()
-    if reason:
-        raise MissingDependencyError(reason)
-
-
-def require_media() -> None:
-    reason = media_unavailable()
     if reason:
         raise MissingDependencyError(reason)
 

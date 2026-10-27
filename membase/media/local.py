@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-from .backend import LocalError
+from ..local.backend import LocalError
 
 if TYPE_CHECKING:
-    from .backend import LocalBackend
+    from ..local.backend import LocalBackend
 
 KINDS = ("image", "video", "audio", "text")
 _LIMIT_MAX = 50
@@ -49,7 +49,7 @@ class LocalMedia:
 
     @staticmethod
     def _require() -> None:
-        from ..requirements import media_unavailable
+        from .requirements import media_unavailable
 
         reason = media_unavailable()
         if reason:

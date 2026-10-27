@@ -7,6 +7,7 @@ import os
 from typing import Any, Callable
 
 from ..client import Membase
+from ..media import mcp as media_mcp
 
 MEMORY_PROTOCOL = """\
 You are connected to the user's persistent long-term memory (Membase). It is the
@@ -24,62 +25,6 @@ authoritative record of the user's past, preferences, decisions, projects and pe
    it?"). Do not guess and do not pretend to remember.
 4. When memory conflicts with what you would otherwise say, memory wins.
 """
-
-
-MEDIA_PROTOCOL = """
-5. Photos, videos and audio recordings live in media memory, apart from the rest: look there
-   with `search_media` (or `ask_media` for an answer), and store a file the user hands you
-   with `add_media`.
-"""
-
-
-def _media_tool_specs(client: Callable[[], Membase]) -> list[tuple[str, str, Callable[..., Any]]]:
-    def add_media(path: str | None = None, url: str | None = None, container: str | None = None,
-                  title: str = "", custom_id: str = "") -> dict:
-        return client().media.add(path, url=url, container=container, title=title, custom_id=custom_id)
-
-    def list_media(container: str | None = None) -> dict:
-        return client().media.list(container=container)
-
-    def get_media(media_id: str) -> dict:
-        return client().media.get(media_id)
-
-    def search_media(q: str, container: str | None = None, kind: str | None = None,
-                     limit: int | None = None) -> dict:
-        return client().media.search(q, container=container, kind=kind, limit=limit)
-
-    def ask_media(message: str, container: str | None = None) -> dict:
-        return client().media.ask(message, container=container)
-
-    def delete_media(media_id: str, confirm: bool = False) -> dict:
-        return client().media.delete(media_id, confirm=confirm)
-
-    return [
-        ("add_media",
-         "Store an image, video or audio file: a `path` on this machine or a public `url`. Shots, "
-         "captions, speech and speakers are worked out before it returns (minutes for a long video).",
-         add_media),
-        ("list_media", "The photos, videos and recordings in media memory, newest first.", list_media),
-        ("get_media", "One media item with its shots and spoken lines (times, speakers, thumbnails).",
-         get_media),
-        ("search_media",
-         "Photos, videos and recordings matching `q` (any language), best first, each with the "
-         "moments that matched. `kind` is image, video, audio or text.", search_media),
-        ("ask_media", "An answer from media memory alone, with the items it drew on.", ask_media),
-        ("delete_media",
-         "Remove a media item. Without `confirm=true` this only returns what would be removed.",
-         delete_media),
-    ]
-
-
-def _media_enabled(client: Membase | Callable[[], Membase]) -> bool:
-    """Media tools only for local memory with the media extra installed."""
-    from ..requirements import media_unavailable
-
-    if not isinstance(client, Membase):
-        return False
-    local = getattr(client._http._transport, "backend", None) is not None  # noqa: SLF001
-    return local and media_unavailable() is None
 
 
 def _tool_specs(client: Callable[[], Membase]) -> list[tuple[str, str, Callable[..., Any]]]:
@@ -155,10 +100,10 @@ def build_server(client: Membase | Callable[[], Membase], private_key: str | Non
     from mcp.server.fastmcp import FastMCP
 
     get = client if callable(client) and not isinstance(client, Membase) else (lambda: client)
-    media = _media_enabled(client)
-    mcp = FastMCP(name="membase", instructions=MEMORY_PROTOCOL + (MEDIA_PROTOCOL if media else ""))
+    media = media_mcp.enabled(client)
+    mcp = FastMCP(name="membase", instructions=MEMORY_PROTOCOL + (media_mcp.PROTOCOL if media else ""))
 
-    for name, description, fn in _tool_specs(get) + (_media_tool_specs(get) if media else []):
+    for name, description, fn in _tool_specs(get) + (media_mcp.tool_specs(get) if media else []):
 # The local engine uses async_to_sync, which refuses the event loop's thread.
         async def tool(*args: Any, __fn: Callable[..., Any] = fn, **kwargs: Any) -> Any:
             return await asyncio.to_thread(__fn, *args, **kwargs)

@@ -81,5 +81,5 @@ Captions and transcription need an OpenAI-compatible API (`OPENAI_API_KEY`, or `
 ## Repository
 
 `membase/` is the Python package (`client.py`, `cli.py`, `local/` for local memory and `membase serve`,
-`mcp/` for `membase mcp`); `typescript/` is the npm package `@unibaseio/membase` and `cli/` the npm package
+`mcp/` for `membase mcp`, `media/` for media memory, which the rest only mounts); `typescript/` is the npm package `@unibaseio/membase` and `cli/` the npm package
 `@unibaseio/membase-cli`. `membase-ai` and `membase-sdk` (PyPI and npm) are earlier names.

@@ -15,16 +15,10 @@ import pytest
 
 pytest.importorskip("membase_media", reason="needs the media extra (unibaseio-membase-core[media])")
 
-from membase import (  # noqa: E402
-    BadRequestError,
-    Membase,
-    NotFoundError,
-    UnprocessableEntityError,
-    cli,
-    requirements,
-)
+from membase import BadRequestError, Membase, NotFoundError, UnprocessableEntityError, cli  # noqa: E402
 from membase.local.server import make_server  # noqa: E402
-from membase.requirements import INSTALL_MEDIA, media_unavailable  # noqa: E402
+from membase.media import requirements  # noqa: E402
+from membase.media.requirements import INSTALL_MEDIA, media_unavailable  # noqa: E402
 from membase_media import MediaConfig  # noqa: E402
 
 COLORS = {"red": (255, 0, 0), "green": (0, 255, 0), "blue": (0, 0, 255)}
@@ -241,7 +235,7 @@ def test_media_needs_its_extra(tmp_path, monkeypatch):
 
 
 def test_cli_media_commands(tmp_path, capsys, media_ready, monkeypatch, llm):
-    from membase.local.media import LocalMedia
+    from membase.media.local import LocalMedia
 
     real_engine = LocalMedia.engine
 

@@ -127,7 +127,7 @@ class LocalBackend:
     def media(self):
         """Media memory (photos, videos, audio): its own engines, search and ask."""
         if self._media is None:
-            from .media import LocalMedia
+            from ..media.local import LocalMedia
 
             self._media = LocalMedia(self)
         return self._media
