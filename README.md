@@ -67,6 +67,7 @@ history on LoCoMo and 11× fewer on LongMemEval_S. Method and results: [membase.
 ```bash
 pip install unibaseio-membase              # hosted · Python 3.10+ · needs MEMBASE_API_KEY
 pip install 'unibaseio-membase[local]'     # local  · Python 3.12 or 3.13 · needs OPENAI_API_KEY
+pip install 'unibaseio-membase[media]'     # local + photos, videos and audio
 npm install @unibaseio/membase              # TypeScript · Node 18+
 npm install -g @unibaseio/membase-cli       # the `membase` command (hosted) without Python
 ```
@@ -95,10 +96,13 @@ membase --local ask "Which database is the ledger on?"
 membase --local import ~/Downloads/claude-export.json     # Claude, ChatGPT, markdown or JSON chats
 membase --local agent ingest trace.json --agent coder
 membase --local agent search "fix flaky deploy" --agent coder
+membase --local media add ~/Movies/trip.mp4                # shots, speech and speakers
+membase --local media search "someone skiing"   # any language
 ```
 
 Without `--local` (or `--store DIR`, both before the command) commands use the hosted API; `agent`,
-`import` and `serve` need `unibaseio-membase[local]`.
+`import` and `serve` need `unibaseio-membase[local]`, and `media` (local only, with its own search
+and ask) needs `unibaseio-membase[media]`: see [Media memory](docs/reference.md#media-memory).
 
 ## MCP
 

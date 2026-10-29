@@ -11,6 +11,7 @@ from typing import Any
 from ._version import __version__
 from .client import Membase
 from .errors import MembaseError
+from .media import cli as media_cli
 
 
 def _client(args: argparse.Namespace) -> Membase:
@@ -168,6 +169,8 @@ def _parser() -> argparse.ArgumentParser:
     gk.add_argument("--agent", required=True)
     gk.add_argument("--container")
 
+    media_cli.add_parser(sub)
+
     sv = sub.add_parser("serve", help="serve local memory over HTTP on the /v1 routes (always local; "
                                       "MEMBASE_LOCAL_TOKEN requires a bearer)")
     sv.add_argument("--host", default="127.0.0.1", help="default 127.0.0.1")
@@ -229,6 +232,8 @@ def main(argv: list[str] | None = None) -> int:
             out = m.ask(args.message)
         elif args.cmd == "agent":
             out = _cmd_agent(args, m)
+        elif args.cmd == "media":
+            out = media_cli.run(args, m)
         else:
             out = _cmd_import(args, m)
         _print(out)

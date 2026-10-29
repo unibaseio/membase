@@ -7,6 +7,7 @@ import os
 from typing import Any, Callable
 
 from ..client import Membase
+from ..media import mcp as media_mcp
 
 MEMORY_PROTOCOL = """\
 You are connected to the user's persistent long-term memory (Membase). It is the
@@ -99,9 +100,10 @@ def build_server(client: Membase | Callable[[], Membase], private_key: str | Non
     from mcp.server.fastmcp import FastMCP
 
     get = client if callable(client) and not isinstance(client, Membase) else (lambda: client)
-    mcp = FastMCP(name="membase", instructions=MEMORY_PROTOCOL)
+    media = media_mcp.enabled(client)
+    mcp = FastMCP(name="membase", instructions=MEMORY_PROTOCOL + (media_mcp.PROTOCOL if media else ""))
 
-    for name, description, fn in _tool_specs(get):
+    for name, description, fn in _tool_specs(get) + (media_mcp.tool_specs(get) if media else []):
 # The local engine uses async_to_sync, which refuses the event loop's thread.
         async def tool(*args: Any, __fn: Callable[..., Any] = fn, **kwargs: Any) -> Any:
             return await asyncio.to_thread(__fn, *args, **kwargs)

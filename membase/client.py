@@ -11,6 +11,7 @@ import httpx
 
 from ._version import __version__
 from .errors import APIConnectionError, APITimeoutError, error_for
+from .media.client import Media
 
 DEFAULT_BASE_URL = "https://api.app.membase.com"
 # The first search after a quiet spell can take up to a minute while the memory wakes.
@@ -54,6 +55,7 @@ class Membase:
             self.containers = _Containers(self)
             self.documents = _Documents(self)
             self.memories = _Memories(self)
+            self.media = Media(self)
             return
         api_key = api_key if api_key is not None else os.environ.get("MEMBASE_API_KEY")
         if not api_key:
@@ -71,6 +73,7 @@ class Membase:
         self.containers = _Containers(self)
         self.documents = _Documents(self)
         self.memories = _Memories(self)
+        self.media = Media(self)
 
 
     def add(

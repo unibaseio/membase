@@ -66,6 +66,10 @@ ROUTES: list[tuple[str, re.Pattern, Callable[..., Any], int]] = [
     ("POST", re.compile(r"^/v1/ask$"), _ask, 200),
 ]
 
+from ..media.routes import ROUTES as _MEDIA_ROUTES  # noqa: E402
+
+ROUTES += _MEDIA_ROUTES
+
 
 def error_body(status: int, code: str, message: str, details: Any = None) -> dict:
     return {"error": {"code": code, "message": message, "details": details,
