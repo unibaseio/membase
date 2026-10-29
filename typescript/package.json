@@ -1,6 +1,6 @@
 {
   "name": "@unibaseio/membase",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "Membase SDK for TypeScript: the memory layer for AI agents, hosted or local via `membase --local serve`.",
   "license": "MIT",
   "publishConfig": {
@@ -42,11 +42,11 @@
   "devDependencies": {
     "@types/node": "^20.19.43",
     "typescript": "^5.6.2",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/unibaseio/membase-ai.git",
+    "url": "git+https://github.com/unibaseio/membase.git",
     "directory": "typescript"
   }
 }

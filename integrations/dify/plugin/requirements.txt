@@ -1,2 +1,6 @@
 dify_plugin==0.9.1
 unibaseio-membase==0.3.2
+# Floors for transitive deps (via httpx) with known vulnerabilities below them.
+anyio>=4.14.2
+certifi>=2026.10.19
+idna>=3.15
