@@ -10,7 +10,7 @@
   Framework function tools, so the model saves when the user asks and searches when it needs to.
 
 ```bash
-pip install "agent-framework-membase @ git+https://github.com/unibaseio/membase#subdirectory=integrations/agent-framework"
+pip install agent-framework-membase
 ```
 
 You need a Membase developer key: in the [Membase app](https://app.membase.com), **Connect ›
@@ -20,7 +20,7 @@ saving needs *Read & write*.
 ## Quick start
 
 ```python
-# pip install "agent-framework-membase @ git+https://github.com/unibaseio/membase#subdirectory=integrations/agent-framework" agent-framework-openai
+# pip install agent-framework-membase agent-framework-openai
 import asyncio
 from agent_framework import Agent
 from agent_framework.openai import OpenAIChatClient  # any Agent Framework chat client works
@@ -132,7 +132,7 @@ is never served through someone else's key. `client_for` cannot be combined with
 `client` or `api_key`. Return a long-lived client per person (the `lru_cache` above), since
 each `Membase` holds a connection pool.
 
-**Local mode**: `pip install "agent-framework-membase[local] @ git+https://github.com/unibaseio/membase#subdirectory=integrations/agent-framework"` (Python 3.12+, plus an LLM key
+**Local mode**: `pip install "agent-framework-membase[local]"` (Python 3.12+, plus an LLM key
 such as `OPENAI_API_KEY`) runs the same API in-process on a directory:
 `MembaseContextProvider(local="./memory")`, or
 `client_for=lambda uid: Membase(local=f"./memory/{uid}")` for one directory per person.
