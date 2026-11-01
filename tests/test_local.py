@@ -264,6 +264,7 @@ def test_the_retired_routes_are_gone(local):
     # writes are POST + an action; the old method on the old path is not allowed
     assert local._http.post("/v1/memories", json={"content": "x"}).status_code == 405
     assert local._http.post("/v1/documents", json={"content": "x"}).status_code == 405
+    assert local._http.post("/v1/media", json={"url": "https://x/y.png"}).status_code == 405
     for path in ("/v1/memories/mem_x", "/v1/documents/doc_x", "/v1/media/med_x"):
         r = local._http.delete(path, params={"confirm": "true"})
         assert r.status_code == 405 and r.json()["error"]["code"] == "method_not_allowed", path

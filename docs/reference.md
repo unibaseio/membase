@@ -71,7 +71,7 @@ Search runs in any language over captions and speech.
 
 | Route | Python | MCP tool | Command line |
 |---|---|---|---|
-| `POST /v1/media` `{path \| url, title?, custom_id?}` (local only) | `m.media.add(path, url=)` | `add_media` | `media add FILE \| --url` |
+| `POST /v1/media/add` `{path \| url, title?, custom_id?}` (local only) | `m.media.add(path, url=)` | `add_media` | `media add FILE \| --url` |
 | `GET /v1/media?limit=` | `m.media.list()` | `list_media` | `media list` |
 | `GET /v1/media/{id}` | `m.media.get(id)` | `get_media` | `media get ID` |
 | `POST /v1/media/{id}/delete?confirm=` | `m.media.delete(id, confirm=)` | `delete_media` | `media delete ID [--confirm]` |

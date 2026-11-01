@@ -1,6 +1,6 @@
 """The ``/v1/media`` routes, answered by a :class:`LocalBackend`'s media memory: the hosted media
 routes (list, get, search, delete, the file and its thumbnails) plus two that only local memory has,
-``POST /v1/media`` (store a file) and ``POST /v1/media/ask``."""
+``POST /v1/media/add`` (store a file) and ``POST /v1/media/ask``."""
 
 from __future__ import annotations
 
@@ -87,7 +87,7 @@ def _file(b, q, body, m) -> Any:
 
 
 ROUTES: list[tuple[str, re.Pattern, Callable[..., Any], int]] = [
-    ("POST", re.compile(r"^/v1/media$"), _add, 202),
+    ("POST", re.compile(r"^/v1/media/add$"), _add, 202),
     ("GET", re.compile(r"^/v1/media$"), _list, 200),
     ("POST", re.compile(r"^/v1/media/search$"), _search, 200),
     ("POST", re.compile(r"^/v1/media/ask$"), _ask, 200),

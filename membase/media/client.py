@@ -62,7 +62,7 @@ class Media:
             body["path"] = str(Path(path).expanduser().resolve())
         if url is not None:
             body["url"] = url
-        return self._c._request("POST", "/v1/media", json=body)
+        return self._c._request("POST", "/v1/media/add", json=body)
 
     def ask(self, message: str) -> dict:
         """Local memory only: an answer from media memory alone, with the items it drew on as

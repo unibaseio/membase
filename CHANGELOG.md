@@ -34,9 +34,10 @@ once it serves the memory API.
 
 ### Writes are `POST` + an action
 
-Reads stay `GET` (and `POST /v1/search`, `POST /v1/media/search`, `POST /v1/ask`); every write is a
-`POST` naming its action. `confirm` stays a query parameter and the bodies are unchanged. The earlier
-method on the earlier path answers `405 method_not_allowed`. The SDK methods keep their names.
+Reads stay `GET` (and `POST /v1/search`, `POST /v1/media/search`, `POST /v1/ask`, local
+`POST /v1/media/ask`); every write is a `POST` naming its action. `confirm` stays a query parameter
+and the bodies are unchanged. The earlier method on the earlier path answers
+`405 method_not_allowed`. The SDK methods keep their names.
 
 | | 0.3 | 0.4 |
 |---|---|---|
@@ -45,6 +46,7 @@ method on the earlier path answers `405 method_not_allowed`. The SDK methods kee
 | `add` / `documents.add` | `POST /v1/documents` | `POST /v1/documents/add` |
 | `documents.delete` | `DELETE /v1/documents/{id}` | `POST /v1/documents/{id}/delete?confirm=` |
 | `media.delete` | `DELETE /v1/media/{id}` | `POST /v1/media/{id}/delete?confirm=` |
+| `media.add` (local only) | `POST /v1/media` | `POST /v1/media/add` |
 
 Every list is `{items, has_more, partial}`: the newest `limit` (1–1000, default 100), whether more
 were left out, and the Memories that could not answer. Learning status is `succeeded`, `processing`,

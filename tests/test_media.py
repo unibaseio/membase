@@ -174,7 +174,7 @@ def test_custom_ids_and_delete_with_confirmation(local, tmp_path):
 
 def test_refusals(local, tmp_path):
     with pytest.raises(BadRequestError):
-        local._request("POST", "/v1/media", json={"path": "/x.png", "url": "https://x/y.png"})
+        local._request("POST", "/v1/media/add", json={"path": "/x.png", "url": "https://x/y.png"})
     with pytest.raises(BadRequestError, match="no such file"):
         local.media.add(tmp_path / "missing.png")
     (tmp_path / "data.bin").write_bytes(b"\x00")
