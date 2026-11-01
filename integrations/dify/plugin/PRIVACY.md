@@ -17,7 +17,7 @@ other service is contacted by the plugin.
 | Credential check | the API key only (it reads what the key may do) |
 | Search memory | the search text, and optionally a result limit |
 | Save memory | the fact to save, as passed by the agent or workflow |
-| Get user profile | optionally a topic text |
+| Get user profile | nothing beyond the request itself |
 
 Each request carries the Membase API key in the `Authorization` header. The plugin does not
 send Dify user ids, conversation ids, app ids, files, or any data other than the tool inputs

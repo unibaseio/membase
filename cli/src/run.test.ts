@@ -26,11 +26,11 @@ function harness(opts: { files?: Record<string, string>; fail?: Error; noKey?: b
       return {
         add: rec("add"),
         search: rec("search"),
-        profile: rec("profile"),
         ask: rec("ask"),
         capabilities: rec("capabilities"),
         documents: { list: rec("documents.list"), get: rec("documents.get"), delete: rec("documents.delete") },
         memories: { list: rec("memories.list"), get: rec("memories.get"), add: rec("memories.add"), forget: rec("memories.forget") },
+        profileFacts: { list: rec("profileFacts.list"), add: rec("profileFacts.add"), forget: rec("profileFacts.forget") },
         media: { list: rec("media.list"), get: rec("media.get"), search: rec("media.search"), delete: rec("media.delete") },
       } as unknown as ReturnType<Io["client"]>;
     },
@@ -56,8 +56,9 @@ describe("membase (npm)", () => {
       [["media", "get", "med_eA"], ["media.get", "med_eA"]],
       [["media", "search", "skiing", "--kind", "video"], ["media.search", { q: "skiing", kind: "video", limit: undefined }]],
       [["media", "delete", "med_eA", "--confirm"], ["media.delete", "med_eA", { confirm: true }]],
-      [["profile", "hours"], ["profile", { q: "hours" }]],
-      [["profile"], ["profile", { q: undefined }]],
+      [["profile-facts", "list", "--limit", "5"], ["profileFacts.list", { limit: 5 }]],
+      [["profile-facts", "add", "Prefers dark mode."], ["profileFacts.add", { content: "Prefers dark mode." }]],
+      [["profile-facts", "forget", "pf_eA", "--confirm"], ["profileFacts.forget", "pf_eA", { confirm: true }]],
       [["ask", "Which database?"], ["ask", { message: "Which database?" }]],
       [["capabilities"], ["capabilities"]],
     ];

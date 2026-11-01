@@ -10,7 +10,7 @@ export const VERSION = "0.4.0";
 const INSTALL_LOCAL = "pip install 'unibaseio-membase[local]'";
 const HOSTED_MCP_URL = "https://api.app.membase.com/mcp-http";
 
-type Client = Pick<Membase, "add" | "search" | "profile" | "ask" | "capabilities" | "documents" | "memories" | "media">;
+type Client = Pick<Membase, "add" | "search" | "ask" | "capabilities" | "documents" | "memories" | "profileFacts" | "media">;
 
 export interface Io {
   out: (text: string) => void;
@@ -45,9 +45,11 @@ commands:
   media get MEDIA_ID
   media search Q [--kind image|video] [--limit N]
   media delete MEDIA_ID [--confirm]
-  profile [Q]                     who the user is
-  ask MESSAGE                     an answer composed from memory
-  capabilities                    what this key may do, and the Memories it reaches
+  profile-facts list [--limit N]  who the user is: standing statements, newest first
+  profile-facts add CONTENT       keep one statement about the user
+  profile-facts forget FACT_ID [--confirm]
+  ask MESSAGE                     one answer written by the memory
+  capabilities                    what this key may do, the Memories it reaches, and the rules
 
 Writes land in the key's write target. Without --confirm a removal changes nothing and prints
 what would go (exit 1).
@@ -70,7 +72,9 @@ const FLAGS: Record<string, string[]> = {
   "media get": [],
   "media search": ["kind", "limit"],
   "media delete": ["confirm"],
-  profile: [],
+  "profile-facts list": ["limit"],
+  "profile-facts add": [],
+  "profile-facts forget": ["confirm"],
   ask: [],
   capabilities: [],
 };
@@ -79,6 +83,7 @@ const GROUPS: Record<string, string> = {
   memories: "list, get",
   documents: "add, list, get, delete",
   media: "list, get, search, delete",
+  "profile-facts": "list, add, forget",
 };
 
 const PYTHON_ONLY: Record<string, string> = {
@@ -257,9 +262,18 @@ export async function main(argv: string[], io: Io = defaultIo): Promise<number> 
         out = await m.media.delete(id, { confirm: v.confirm ?? false });
         break;
       }
-      case "profile": {
-        const [q] = positionals(rest, 0, 1, key);
-        out = await m.profile({ q });
+      case "profile-facts list":
+        positionals(rest, 0, 0, key);
+        out = await m.profileFacts.list({ limit });
+        break;
+      case "profile-facts add": {
+        const [content] = positionals(rest, 1, 1, key);
+        out = await m.profileFacts.add({ content });
+        break;
+      }
+      case "profile-facts forget": {
+        const [id] = positionals(rest, 1, 1, key);
+        out = await m.profileFacts.forget(id, { confirm: v.confirm ?? false });
         break;
       }
       case "ask": {

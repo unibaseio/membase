@@ -45,9 +45,16 @@ export interface MediaItem { id: string; kind: string; filename?: string | null;
 export interface MediaSearchResult { items: MediaItem[]; partial: PartialMemory[] }
 /** A carried-out removal. */
 export interface Removed { id: string; status: "forgotten" | "deleted" | string }
-export interface Profile { available?: boolean; ready?: boolean; static: string[]; dynamic: Array<{ id: number | string; content: string; updated_at?: string }>; results?: Array<Record<string, unknown>>; [k: string]: unknown }
+/** One standing statement about the user (`pf_…`): the account's, not a Memory's. */
+export interface ProfileFact { id: string; content: string; source_kind: "user_stated" | "imported" | "model_generated" | string; recorded_at?: string | null; [k: string]: unknown }
+/** `profileFacts.add`'s answer: the statement kept, and whether it is new (`false`: the same one was already kept). */
+export interface ProfileFactAdded extends ProfileFact { created: boolean }
+/** The user's standing rules for using their memory. */
+export interface Rules { citation_required: boolean; retention_notice: string; version: string; [k: string]: unknown }
+/** One answer from the memory, the Memory it came from, and the Memories that could not answer. */
+export interface Answer { answer: string; citations: Array<{ memory_name: string }>; partial: PartialMemory[] }
 /** What this key may do. Not permission: every call is still checked when made. */
-export interface Capabilities { principal: string; surfaces: string[]; tools: string[]; features?: string[]; actions?: string[]; memories?: Array<{ name: string; kind: string }>; [k: string]: unknown }
+export interface Capabilities { actions: string[]; memories: Array<{ name: string; kind: string }>; rules: Rules; features: string[]; [k: string]: unknown }
 export type Json = Record<string, unknown>;
 
 export interface AddParams {
@@ -111,6 +118,19 @@ export class Membase {
       this.request("POST", `${item("documents", documentId)}/delete`, { query: { confirm: flag(params.confirm) } }),
   };
 
+  /** Who the user is (`pf_…`): standing statements, the account's. Each needs the key's profile tick. */
+  readonly profileFacts = {
+    /** The statements, newest first (`limit` 1–1000, default 100), each with its `source_kind`. */
+    list: (params: { limit?: number } = {}): Promise<Page<ProfileFact>> =>
+      this.request("GET", "/v1/profile-facts", { query: { limit: params.limit } }),
+    /** Keep one statement about the user; `created: false` when the same one was already kept. */
+    add: (params: { content: string }): Promise<ProfileFactAdded> =>
+      this.request("POST", "/v1/profile-facts/add", { body: { content: params.content } }),
+    /** Forget one statement. Needs Full access and `confirm: true`; otherwise `ConfirmationRequiredError` (428) and nothing changes. */
+    forget: (factId: string, params: { confirm?: boolean } = {}): Promise<Removed> =>
+      this.request("POST", `${item("profile-facts", factId)}/forget`, { query: { confirm: flag(params.confirm) } }),
+  };
+
   /** Photos and videos (`med_…`) in the media Memories in reach. */
   readonly media = {
     /** Newest first, each with its `summary`, `file_url` and `thumb_url`. */
@@ -149,22 +169,12 @@ export class Membase {
     return this.request("POST", "/v1/search", { body: { q: params.q, limit: params.limit, mode: params.mode ?? "full" } });
   }
 
-  /** Who the user is: `static` (standing facts), `dynamic` (recently changed facts) and, with `q`, `results` relevant to the topic. */
-  profile(params: { q?: string } = {}): Promise<Profile> {
-    return this.request("GET", "/v1/profile", { query: { q: params.q } });
+  /** One answer to `message`, written by the memory from the Memories in reach; the passages are not returned. Needs a credential that holds `ask` (a marketplace buyer's). */
+  ask(params: { message: string }): Promise<Answer> {
+    return this.request("POST", "/v1/ask", { body: { message: params.message } });
   }
 
-  /** The exposed agent's answer to `message` (an agent-endpoint credential). */
-  ask(params: { message: string; model?: string }): Promise<Json> {
-    return this.request("POST", "/v1/ask", { body: { message: params.message, model: params.model } });
-  }
-
-  /** The user's standing rules for how their memory is used by this credential. */
-  rules(): Promise<Json> {
-    return this.request("GET", "/v1/rules");
-  }
-
-  /** What this key may do (`actions`: `search`, `memories.add`, …) and the Memories it reaches, by name and kind. */
+  /** What this key may do (`actions`: `search`, `memories.add`, …), the Memories it reaches (by name and kind) and the user's standing `rules`. */
   capabilities(): Promise<Capabilities> {
     return this.request("GET", "/v1/capabilities");
   }

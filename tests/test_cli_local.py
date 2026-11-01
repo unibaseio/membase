@@ -68,7 +68,17 @@ def test_cli_speaks_the_memory_api(tmp_path, capsys, monkeypatch):
     assert json.loads(capsys.readouterr().out)["items"] == []
     assert cli.main([*store, "capabilities"]) == 0
     assert "memories.add" in json.loads(capsys.readouterr().out)["actions"]
-    for retired in (["containers"], ["search", "x", "--container", "a"], ["add", "x", "--static"]):
+    assert cli.main([*store, "profile-facts", "add", "Prefers dark mode."]) == 0
+    fact = json.loads(capsys.readouterr().out)
+    assert fact["id"].startswith("pf_") and fact["created"] is True
+    assert cli.main([*store, "profile-facts", "list", "--limit", "5"]) == 0
+    assert [f["id"] for f in json.loads(capsys.readouterr().out)["items"]] == [fact["id"]]
+    assert cli.main([*store, "profile-facts", "forget", fact["id"]]) == 1
+    assert json.loads(capsys.readouterr().out)["error"]["code"] == "confirmation_required"
+    assert cli.main([*store, "profile-facts", "forget", fact["id"], "--confirm"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"id": fact["id"], "status": "forgotten"}
+    for retired in (["containers"], ["search", "x", "--container", "a"], ["add", "x", "--static"],
+                    ["profile"], ["rules"]):
         with pytest.raises(SystemExit):
             cli.main([*store, *retired])
         capsys.readouterr()

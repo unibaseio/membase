@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from typing import Annotated, Any
+from typing import Annotated
 
 from agent_framework import FunctionInvocationContext, FunctionTool, tool
 from membase import Membase
@@ -110,17 +110,12 @@ def membase_tools(
         return f"Saved to Membase{where}; it will be searchable once the Memory has learned it."
 
     @tool(name="membase_profile", approval_mode="never_require")
-    async def membase_profile(
-        topic: Annotated[
-            str | None, Field(description="Optional topic to pull relevant profile facts for.")
-        ] = None,
-        ctx: FunctionInvocationContext | None = None,
-    ) -> str:
-        """Read the user's Membase profile: standing facts about who they are and their
-        preferences, and the most recently changed ones. Read it once, near the start."""
+    async def membase_profile(ctx: FunctionInvocationContext | None = None) -> str:
+        """Read the user's Membase profile: standing statements about who they are (name, role,
+        lasting preferences), newest first. Read it once, near the start."""
         try:
             mb = _client(ctx)
-            p = await in_thread(mb.profile, topic)
+            p = await in_thread(mb.profile_facts.list)
         except NoUserBound as exc:
             return f"Membase is not available: {exc}."
         except PermissionDeniedError as exc:
@@ -130,17 +125,11 @@ def membase_tools(
             )
         except Exception as exc:  # noqa: BLE001 - the tool answers the model with the error
             return describe_error(exc)
-        out: list[str] = []
-        for label, key in (
-            ("Standing facts", "static"),
-            ("Recently changed", "dynamic"),
-            ("On the topic", "results"),
-        ):
-            items = [_text(x) for x in (p or {}).get(key) or []]
-            items = [x for x in items if x]
-            if items:
-                out.append(f"{label}:\n" + "\n".join(f"- {x}" for x in items))
-        return "\n\n".join(out) or "The user's Membase profile is empty."
+        items = [str(x.get("content") or "").strip() for x in (p or {}).get("items") or []]
+        items = [x for x in items if x]
+        if not items:
+            return "The user's Membase profile is empty."
+        return "About the user:\n" + "\n".join(f"- {x}" for x in items)
 
     tools: list[FunctionTool] = [membase_search]
     if save:
@@ -148,14 +137,6 @@ def membase_tools(
     if profile:
         tools.append(membase_profile)
     return tools
-
-
-def _text(item: Any) -> str:
-    if isinstance(item, str):
-        return item.strip()
-    if isinstance(item, dict):
-        return str(item.get("content") or item.get("text") or item.get("memory") or "").strip()
-    return str(item).strip()
 
 
 __all__ = ["membase_tools"]

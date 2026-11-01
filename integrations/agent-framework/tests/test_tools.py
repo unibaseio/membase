@@ -68,12 +68,12 @@ async def test_save_with_a_read_key_explains_the_refusal(mem):
 
 async def test_profile(mem):
     _, (out,) = await _run(mem, [call("membase_profile", {})])
-    assert "Standing facts:\n- Works in Berlin" in out and "Recently changed:\n- Prefers dark mode" in out
+    assert out == "About the user:\n- Works in Berlin\n- Prefers dark mode"
 
 
 async def test_profile_not_shared_is_a_clear_message(mem):
-    mem.status["/v1/profile"] = 403
-    _, (out,) = await _run(mem, [call("membase_profile", {"topic": "food"})])
+    mem.status["/v1/profile-facts"] = 403
+    _, (out,) = await _run(mem, [call("membase_profile", {})])
     assert "did not share the profile" in out
 
 

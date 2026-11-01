@@ -7,7 +7,7 @@ The plugin adds three tools:
 |---|---|
 | **Search memory** | Finds passages in every Memory the key reaches that answer a question, most relevant first. Each passage names the Memory it came from. |
 | **Save memory** | Saves one fact, in the user's words, to the key's Memory. Only when the user asks for it. |
-| **Get user profile** | Reads the standing facts about the user and the facts that changed most recently. |
+| **Get user profile** | Reads the profile facts: standing statements about who the user is, newest first. |
 
 There is no delete or forget tool. Deleting memory is done by the account owner in the
 Membase app.
@@ -53,7 +53,7 @@ Tool inputs:
 - *Search memory*: `query` (required), `limit` (optional, 1-50 passages in all). It searches
   every Memory the key reaches.
 - *Save memory*: `content` (required). It goes to the key's write target.
-- *Get user profile*: `query` (optional topic; adds passages relevant to it).
+- *Get user profile*: no parameters.
 
 Each tool returns a readable `text` output and a `json` output with the full answer, including
 `memory_name` on every passage.

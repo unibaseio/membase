@@ -36,8 +36,8 @@ console.log(items[0].content, items[0].memory_name);
 await client.memories.add({ content: "The user prefers dark mode." });   // a fact; the receipt is a doc_ note
 const { items: facts } = await client.memories.list({ limit: 20 });   // mem_ ids
 await client.documents.list({ kind: "file" });
-await client.profile({ q: "working hours" });         // who the user is (the key needs Profile access)
-await client.capabilities();                          // what this key may do, and the Memories it reaches
+await client.profileFacts.list();                    // who the user is (the key needs Your profile ticked)
+await client.capabilities();                          // what this key may do, the Memories it reaches, the rules
 await client.memories.forget(facts[0].id, { confirm: true });   // Full access; confirm means the person agreed
 ```
 

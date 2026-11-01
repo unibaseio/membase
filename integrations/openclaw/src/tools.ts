@@ -1,7 +1,7 @@
 /** Agent tools: membase_search, membase_save, membase_profile. */
 import { createHash } from "node:crypto";
 import { Type, type Static } from "typebox";
-import type { Profile, Receipt } from "membase-sdk";
+import type { Page, ProfileFact, Receipt } from "membase-sdk";
 import type { AnyAgentTool, OpenClawPluginToolContext } from "openclaw/plugin-sdk/plugin-entry";
 import type { MembasePluginConfig } from "./config.js";
 import { describeError, formatSearch, type MembaseClients } from "./membase.js";
@@ -27,11 +27,7 @@ const SaveParams = Type.Object({
   title: Type.Optional(Type.String({ description: "A short title for the note." })),
 });
 
-const ProfileParams = Type.Object({
-  query: Type.Optional(
-    Type.String({ description: "A topic, to also return profile passages relevant to it." }),
-  ),
-});
+const ProfileParams = Type.Object({});
 
 export interface ToolDeps {
   config: MembasePluginConfig;
@@ -133,18 +129,9 @@ export function saveToolFactory(deps: ToolDeps): ToolFactory {
   };
 }
 
-function formatProfile(profile: Profile): string {
-  const parts: string[] = [];
-  if (profile.static?.length) parts.push(["Standing facts:", ...profile.static.map((s) => `- ${s}`)].join("\n"));
-  if (profile.dynamic?.length) {
-    parts.push(["Recently changed:", ...profile.dynamic.map((d) => `- ${d.content}`)].join("\n"));
-  }
-  if (profile.results?.length) {
-    parts.push(
-      ["Relevant:", ...profile.results.map((h) => `- [${String(h.memory_name || h.container_name || "profile")}] ${String(h.content ?? "")}`)].join("\n"),
-    );
-  }
-  return parts.length ? parts.join("\n\n") : "The user's Membase profile is empty.";
+function formatProfile(profile: Page<ProfileFact>): string {
+  const facts = (profile.items ?? []).map((f) => String(f.content ?? "").trim()).filter(Boolean);
+  return facts.length ? ["About the user:", ...facts.map((f) => `- ${f}`)].join("\n") : "The user's Membase profile is empty.";
 }
 
 export function profileToolFactory(deps: ToolDeps): ToolFactory {
@@ -154,16 +141,16 @@ export function profileToolFactory(deps: ToolDeps): ToolFactory {
       name: "membase_profile",
       label: "Membase profile",
       description:
-        "Read who the user is from Membase: standing facts and recently changed ones. Read it once near " +
+        "Read who the user is from Membase: standing statements (name, role, lasting preferences), newest " +
+        "first. Read it once near " +
         "the start of a conversation, not every turn. Needs a key with Profile access.",
       parameters: ProfileParams,
       resultContentSource: "network",
-      async execute(_toolCallId: string, rawParams: unknown, signal?: AbortSignal) {
-        const params = (rawParams ?? {}) as Static<typeof ProfileParams>;
+      async execute(_toolCallId: string, _params: unknown, signal?: AbortSignal) {
         assertCurrent(ctx, signal);
-        let profile: Profile;
+        let profile: Page<ProfileFact>;
         try {
-          profile = await deps.clients.main().profile(params.query ? { q: params.query } : {});
+          profile = await deps.clients.main().profileFacts.list();
         } catch (error) {
           throw new Error(describeError(error, "profile"));
         }

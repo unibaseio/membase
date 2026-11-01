@@ -33,7 +33,7 @@ KEY = "mbk_test_owner_key"
 
 
 class FakeMembase:
-    """Just enough of the Membase memory API (POST /v1/search, GET /v1/profile, POST /v1/memories/add).
+    """Just enough of the Membase memory API (POST /v1/search, GET /v1/profile-facts, POST /v1/memories/add).
     ``fail`` maps a path to a status code, an exception or a callable. ``write_target`` is the Memory a
     save lands in; None stands for a key that reaches several and has none."""
 
@@ -49,7 +49,9 @@ class FakeMembase:
             "partial": [],
         }
         self.profile_response: dict[str, Any] = {
-            "static": ["Works on the ledger service."], "dynamic": ["Planning a trip to Lisbon."], "results": [],
+            "items": [{"id": "pf_Mg", "content": "Works on the ledger service.", "source_kind": "user_stated"},
+                      {"id": "pf_MQ", "content": "Planning a trip to Lisbon.", "source_kind": "user_stated"}],
+            "has_more": False, "partial": [],
         }
         self.fail: dict[str, Any] = {}
         self.delay: dict[str, float] = {}
@@ -88,7 +90,7 @@ class FakeMembase:
             return self.error(401, "no bearer")
         if path == "/v1/search" and request.method == "POST":
             return httpx.Response(200, json=self.search_response)
-        if path == "/v1/profile" and request.method == "GET":
+        if path == "/v1/profile-facts" and request.method == "GET":
             return httpx.Response(200, json=self.profile_response)
         if path == "/v1/memories/add" and request.method == "POST":
             unknown = set(self.body(request)) - {"content", "title"}

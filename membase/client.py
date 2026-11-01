@@ -55,6 +55,7 @@ class Membase:
             )
             self.documents = _Documents(self)
             self.memories = _Memories(self)
+            self.profile_facts = _ProfileFacts(self)
             self.media = Media(self)
             return
         api_key = api_key if api_key is not None else os.environ.get("MEMBASE_API_KEY")
@@ -72,6 +73,7 @@ class Membase:
         self._http = http_client or httpx.Client(base_url=self.base_url, timeout=timeout)
         self.documents = _Documents(self)
         self.memories = _Memories(self)
+        self.profile_facts = _ProfileFacts(self)
         self.media = Media(self)
 
     def add(
@@ -96,24 +98,17 @@ class Membase:
             body["limit"] = limit
         return self._request("POST", "/v1/search", json=body)
 
-    def profile(self, q: str | None = None) -> dict:
-        """Who the user is: ``static`` (standing facts), ``dynamic`` (the most recently changed facts) and, with ``q``, ``results`` relevant to the topic."""
-        return self._request("GET", "/v1/profile", params={"q": q} if q else None)
-
-    def ask(self, message: str, *, model: str | None = None) -> dict:
-        """The exposed agent's answer to ``message`` (an agent-endpoint credential)."""
-        body: dict[str, Any] = {"message": message}
-        if model is not None:
-            body["model"] = model
-        return self._request("POST", "/v1/ask", json=body)
-
-    def rules(self) -> dict:
-        """The user's standing rules for how their memory is used by this credential."""
-        return self._request("GET", "/v1/rules")
+    def ask(self, message: str) -> dict:
+        """One answer to ``message``, written by the memory from the Memories in reach:
+        ``{answer, citations: [{memory_name}], partial}``. The passages are not returned. Needs
+        a credential that holds ``ask`` (a marketplace buyer's)."""
+        return self._request("POST", "/v1/ask", json={"message": message})
 
     def capabilities(self) -> dict:
-        """What this key may do: ``actions`` (``search``, ``memories.add``, …) and the Memories it
-        reaches, by name and kind. Not permission: every call is still checked when made."""
+        """What this key may do: ``actions`` (``search``, ``memories.add``, …), the Memories it
+        reaches (by name and kind), the user's standing ``rules`` (``citation_required``,
+        ``retention_notice``, ``version``) and ``features``. Not permission: every call is still
+        checked when made."""
         return self._request("GET", "/v1/capabilities")
 
     def close(self) -> None:
@@ -214,6 +209,31 @@ class _Memories:
         ``confirm=True``; without it nothing changes and :class:`ConfirmationRequiredError` is
         raised."""
         return self._c._request("POST", _path("memories", memory_id) + "/forget", params={"confirm": _flag(confirm)})
+
+
+class _ProfileFacts:
+    """Who the user is: standing statements (name, role, lasting preferences), the account's
+    rather than a Memory's (``pf_`` ids). Each needs the key's profile tick."""
+
+    def __init__(self, client: Membase) -> None:
+        self._c = client
+
+    def list(self, *, limit: int | None = None) -> dict:
+        """The statements, newest first (``limit`` 1-1000, default 100): ``{items: [{id, content,
+        source_kind, recorded_at}], has_more, partial}``."""
+        return self._c._request("GET", "/v1/profile-facts", params=_limit(limit))
+
+    def add(self, content: str) -> dict:
+        """Keep one statement about the user. The answer is the statement and ``created``
+        (``False`` when the same one was already kept)."""
+        return self._c._request("POST", "/v1/profile-facts/add", json={"content": content})
+
+    def forget(self, fact_id: str, *, confirm: bool = False) -> dict:
+        """Forget one statement. Needs Full access and ``confirm=True``; without it nothing
+        changes and :class:`ConfirmationRequiredError` is raised."""
+        return self._c._request(
+            "POST", _path("profile-facts", fact_id) + "/forget", params={"confirm": _flag(confirm)}
+        )
 
 
 class _Documents:

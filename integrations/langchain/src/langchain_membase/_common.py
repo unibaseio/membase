@@ -187,8 +187,7 @@ def format_passages(results: list[Mapping[str, Any]]) -> str:
     """One line per passage, each citing the Memory it came from."""
     lines = []
     for r in results:
-        # Search items name their Memory as memory_name; the profile's results as container_name.
-        name = r.get("memory_name") or r.get("container_name") or "Membase"
+        name = r.get("memory_name") or "Membase"
         content = str(r.get("content") or "").strip()
         if content:
             lines.append(f"- [{name}] {content}")

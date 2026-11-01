@@ -297,19 +297,20 @@ def test_the_http_server_answers_the_media_routes(tmp_path, media_ready, llm):
         httpd.backend.close()
 
 
-def test_mcp_offers_media_tools_only_locally(tmp_path, media_ready, monkeypatch):
+def test_mcp_offers_storing_and_asking_media_only_locally(tmp_path, media_ready, monkeypatch):
     pytest.importorskip("mcp", reason="needs the mcp library")
     from membase.mcp import build_server
 
     def names(client) -> set[str]:
         return {t.name for t in asyncio.run(build_server(client).list_tools())}
 
-    media_tools = {"add_media", "list_media", "get_media", "search_media", "ask_media", "delete_media"}
+    hosted_tools = {"list_media", "get_media", "search_media", "delete_media"}
+    media_tools = hosted_tools | {"add_media", "ask_media"}
     with Membase(local=tmp_path / "s") as m:
         assert media_tools <= names(m)
     monkeypatch.setenv("MEMBASE_API_KEY", "mbk_test")
     with Membase() as hosted:
-        assert not media_tools & names(hosted)
+        assert names(hosted) & media_tools == hosted_tools
     monkeypatch.setattr(requirements, "media_unavailable", lambda: "no")
     with Membase(local=tmp_path / "s") as m:
         assert not media_tools & names(m)

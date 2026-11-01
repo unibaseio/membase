@@ -1,4 +1,4 @@
-"""get_profile: the standing and recent facts Membase keeps about the user."""
+"""get_profile: the profile facts Membase keeps about the user, newest first."""
 
 from collections.abc import Generator
 from typing import Any
@@ -10,45 +10,20 @@ from membase.errors import MembaseError, PermissionDeniedError
 from membase_dify.client import KEYS_PAGE, MembaseToolError, explain, open_client
 
 
-def _fact(item: Any) -> str:
-    if isinstance(item, dict):
-        return str(item.get("content") or item.get("text") or item.get("fact") or item).strip()
-    return str(item).strip()
-
-
 def format_profile(profile: dict) -> str:
-    sections = []
-    for title, key in (("Standing facts", "static"), ("Recently changed", "dynamic")):
-        facts = [f for f in (_fact(i) for i in profile.get(key) or []) if f]
-        if facts:
-            sections.append(title + ":\n" + "\n".join(f"- {f}" for f in facts))
-    results = profile.get("results") or []
-    if results:
-        sections.append(
-            "Relevant to the topic:\n"
-            + "\n".join(
-                f"- [{r.get('memory_name') or r.get('container_name') or 'Membase'}] "
-                f"{str(r.get('content') or '').strip()}"
-                if isinstance(r, dict)
-                else f"- {r}"
-                for r in results
-            )
-        )
-    if profile.get("available") is False:
-        sections.insert(
-            0, f"The profile could not be read right now: {profile.get('reason') or 'unavailable'}."
-        )
-    elif profile.get("ready") is False:
-        sections.insert(0, "The profile is still loading; what follows may be incomplete.")
-    return "\n\n".join(sections) or "The profile is empty."
+    items = [f for f in profile.get("items") or [] if isinstance(f, dict)]
+    facts = [str(f.get("content") or "").strip() for f in items]
+    facts = [f for f in facts if f]
+    if not facts:
+        return "The profile is empty."
+    return "About the user:\n" + "\n".join(f"- {f}" for f in facts)
 
 
 class GetProfileTool(Tool):
     def _invoke(self, tool_parameters: dict[str, Any]) -> Generator[ToolInvokeMessage, None, None]:
-        query = str(tool_parameters.get("query") or "").strip() or None
         try:
             with open_client(self.runtime.credentials) as client:
-                profile = client.profile(q=query)
+                profile = client.profile_facts.list()
         except PermissionDeniedError as err:
             raise MembaseToolError(
                 f"Membase refused to read the profile (403: {err.message}). The key's owner did "

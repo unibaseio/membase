@@ -146,8 +146,10 @@ def test_the_sdk_sends_the_memory_api_shapes_and_never_a_container():
     c.media.get("med_abc")
     c.media.search("someone skiing", kind="video", limit=4)
     c.media.delete("med_abc")
-    c.profile("hours")
-    c.rules()
+    c.profile_facts.list(limit=5)
+    c.profile_facts.add("Prefers dark mode.")
+    c.profile_facts.forget("pf_eA")
+    c.profile_facts.forget("pf_eA", confirm=True)
     c.ask("Which database?")
     c.capabilities()
 
@@ -170,8 +172,10 @@ def test_the_sdk_sends_the_memory_api_shapes_and_never_a_container():
         ("GET", "/v1/media/med_abc", {}, None),
         ("POST", "/v1/media/search", {}, {"q": "someone skiing", "kind": "video", "limit": 4}),
         ("POST", "/v1/media/med_abc/delete", {"confirm": "false"}, None),
-        ("GET", "/v1/profile", {"q": "hours"}, None),
-        ("GET", "/v1/rules", {}, None),
+        ("GET", "/v1/profile-facts", {"limit": "5"}, None),
+        ("POST", "/v1/profile-facts/add", {}, {"content": "Prefers dark mode."}),
+        ("POST", "/v1/profile-facts/pf_eA/forget", {"confirm": "false"}, None),
+        ("POST", "/v1/profile-facts/pf_eA/forget", {"confirm": "true"}, None),
         ("POST", "/v1/ask", {}, {"message": "Which database?"}),
         ("GET", "/v1/capabilities", {}, None),
     ]
@@ -186,6 +190,9 @@ def test_no_method_takes_a_container():
     for method in methods:
         assert "container" not in inspect.signature(method).parameters, method
     assert not hasattr(c, "containers")
+    for retired in ("profile", "rules"):
+        assert not hasattr(c, retired), retired
+    assert list(inspect.signature(c.ask).parameters) == ["message"]
     with pytest.raises(TypeError):
         c.search("q", container="mv-1")  # type: ignore[call-arg]
 

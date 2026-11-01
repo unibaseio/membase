@@ -65,7 +65,7 @@ prefer.
 |---|---|
 | `membase_search(query, limit?)` | Searches every Memory the key reaches. Each passage is cited as `[Memory name] …`. A Memory that could not answer is listed as such, so it is not mistaken for "no memory". |
 | `membase_save(content)` | Saves a note in the user's words, into the key's write target: the one Memory the key reaches. A key that reaches several Memories has no write target and nothing is saved; the tool says so, and the owner gives the key a single Memory under **Connect › Developer keys**. |
-| `membase_profile(topic?)` | Reads the user's standing facts and recent changes. This needs the owner to have ticked the profile for the key. |
+| `membase_profile()` | Reads the user's profile facts: standing statements about who they are, newest first. This needs the owner to have ticked **Your profile** for the key. |
 
 Pick the tools with `tools=("search", "profile")`. For example, drop `"save"` for a Read key.
 There is no delete or forget tool, and the store never confirms a destructive operation for

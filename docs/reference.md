@@ -28,16 +28,19 @@ token.
 - The engine learns before it answers, so a write's receipt and every document say
   `status: "succeeded"`. A fact added with `POST /v1/memories/add` is kept as a note (a document of kind
   `note`) whose deletion forgets what it taught, as hosted.
-- `/v1/capabilities` names every action (the media ones with the media extra installed).
+- `/v1/capabilities` names every action (the media ones with the media extra installed); local
+  memory has no standing rules, so `rules` is empty.
+- Profile facts (`/v1/profile-facts`) live in the store's profile, apart from every Memory. A
+  statement added locally is `user_stated`; one kept with `add --static` before 0.4 reads as
+  `imported`.
 
-Where local memory differs: the profile's `static` facts are only those added with `add --static`
-before 0.4 (the memory API has no way to write one), and `/v1/ask` reads one Memory, the one whose
-facts match best.
+Where local memory differs: `/v1/ask` is open to every caller (hosted, only a credential granted
+it may ask) and reads one Memory, the one whose facts match best.
 
 ## Local settings
 
 Stores: `~/.membase/memory.db` (the `default` Memory), `~/.membase/containers/<id>/` (others),
-`~/.membase/profile/` (static facts). Settings come from the environment, or from a `.env` file in
+`~/.membase/profile/` (profile facts). Settings come from the environment, or from a `.env` file in
 the current directory or a parent.
 
 | Setting | Default | |
@@ -83,8 +86,9 @@ Search runs in any language over captions and speech.
 moments name their file and thumbnails as routes (`file_url`, `thumb_url`), which answer a `Range`
 with `206`. `add` returns the stored item once it is processed, which takes minutes for a long
 video. `kind` is `image` or `video` hosted; local memory also has `audio` and `text`. `ask` reads
-the Memory whose media match best. The MCP tools appear only for local memory with the extra
-installed.
+the Memory whose media match best. `membase mcp` offers the hosted media tools (list, get, search,
+delete) over hosted memory and over local memory with the extra installed; `add_media` and
+`ask_media` only locally.
 
 | Setting | Default | |
 |---|---|---|

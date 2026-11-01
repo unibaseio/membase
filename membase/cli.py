@@ -147,13 +147,21 @@ def _parser() -> argparse.ArgumentParser:
     f.add_argument("--confirm", action="store_true",
                    help="forget it; without this nothing is forgotten and the answer names what would be")
 
-    pr = sub.add_parser("profile", help="who the user is")
-    pr.add_argument("q", nargs="?")
+    pf = sub.add_parser("profile-facts", help="who the user is: list / add / forget")
+    pfsub = pf.add_subparsers(dest="pf_cmd", required=True)
+    pfl = pfsub.add_parser("list", help="the standing statements about the user, newest first")
+    pfl.add_argument("--limit", type=int, help="1-1000 (default 100)")
+    pfa = pfsub.add_parser("add", help="keep one statement about the user")
+    pfa.add_argument("content")
+    pff = pfsub.add_parser("forget", help="forget one statement by its pf_ id")
+    pff.add_argument("fact_id")
+    pff.add_argument("--confirm", action="store_true",
+                     help="forget it; without this nothing is forgotten and the answer names what would be")
 
-    k = sub.add_parser("ask", help="an answer composed from memory")
+    k = sub.add_parser("ask", help="one answer written by the memory")
     k.add_argument("message")
 
-    sub.add_parser("capabilities", help="what this key may do, and the Memories it reaches")
+    sub.add_parser("capabilities", help="what this key may do, the Memories it reaches, and the rules")
 
     i = sub.add_parser("import", help="import chat exports (Claude, ChatGPT, markdown, JSON); directories are scanned")
     i.add_argument("files", nargs="+")
@@ -229,8 +237,13 @@ def main(argv: list[str] | None = None) -> int:
                 out = m.documents.delete(args.document_id, confirm=args.confirm)
         elif args.cmd == "forget":
             out = m.memories.forget(args.memory_id, confirm=args.confirm)
-        elif args.cmd == "profile":
-            out = m.profile(args.q)
+        elif args.cmd == "profile-facts":
+            if args.pf_cmd == "list":
+                out = m.profile_facts.list(limit=args.limit)
+            elif args.pf_cmd == "add":
+                out = m.profile_facts.add(args.content)
+            else:
+                out = m.profile_facts.forget(args.fact_id, confirm=args.confirm)
         elif args.cmd == "ask":
             out = m.ask(args.message)
         elif args.cmd == "capabilities":

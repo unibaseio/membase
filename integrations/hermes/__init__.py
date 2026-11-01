@@ -104,14 +104,11 @@ SAVE_SCHEMA = {
 PROFILE_SCHEMA = {
     "name": "membase_profile",
     "description": (
-        "Read the user's Membase profile: standing facts about them ('static') and the most recently "
-        "changed ones ('dynamic'); with a query, also passages relevant to it. Read it once near the start "
-        "of a conversation when knowing the person matters."
+        "Read the user's Membase profile: standing statements about who they are (name, role, lasting "
+        "preferences), newest first. Read it once near the start of a conversation when knowing the "
+        "person matters."
     ),
-    "parameters": {
-        "type": "object",
-        "properties": {"query": {"type": "string", "description": "Optional topic to focus 'results' on."}},
-    },
+    "parameters": {"type": "object", "properties": {}},
 }
 
 
@@ -582,13 +579,9 @@ class MembaseMemoryProvider(MemoryProvider):
         return out
 
     def _tool_profile(self, client: Any, args: dict[str, Any]) -> dict[str, Any]:
-        query = str(args.get("query") or "").strip() or None
-        response = client.profile(q=query) or {}
-        out = {"static": response.get("static") or [], "dynamic": response.get("dynamic") or []}
-        if query:
-            out["results"] = [{"memory": _memory_label(r), "content": r.get("content", "")}
-                              for r in response.get("results") or [] if isinstance(r, dict)]
-        return out
+        response = client.profile_facts.list() or {}
+        return {"facts": [str(f.get("content") or "") for f in response.get("items") or []
+                          if isinstance(f, dict) and f.get("content")]}
 
 
 def register(ctx) -> None:

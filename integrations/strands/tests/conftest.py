@@ -60,12 +60,19 @@ class FakeMembase:
                     "learning": [{"memory_name": "Project decisions", "status": "processing"}],
                 },
             )
-        if path == "/v1/profile":
+        if path == "/v1/profile-facts":
             if self.profile_status != 200:
                 return _error(self.profile_status)
             return httpx.Response(
                 200,
-                json={"static": ["Works in Berlin"], "dynamic": ["Started learning Go"], "results": []},
+                json={
+                    "items": [
+                        {"id": "pf_MQ", "content": "Works in Berlin", "source_kind": "user_stated"},
+                        {"id": "pf_Mg", "content": "Started learning Go", "source_kind": "user_stated"},
+                    ],
+                    "has_more": False,
+                    "partial": [],
+                },
             )
         return httpx.Response(404, json={"error": {"code": "not_found", "message": path}})
 

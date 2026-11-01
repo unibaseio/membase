@@ -79,7 +79,7 @@ retrying every turn.
 |---|---|
 | `membase_search(query, limit?)` | Passages from every Memory in reach, each naming its Memory. Memories that could not answer are listed under `unavailable`. |
 | `membase_save(content)` | Saves a note to the key's write target. The answer carries the note's `id` (`doc_…`) and its learning `status`: usually `processing` or `pending`, so the Memory learns it on its next run and it is searchable after that. |
-| `membase_profile(query?)` | The user's standing (`static`) and recent (`dynamic`) facts. Works only when the key's owner ticked the profile. |
+| `membase_profile()` | The user's profile facts: standing statements about who they are, newest first. Works only when the key's owner ticked **Your profile**. |
 
 When the key has no write target, `membase_save` says that nothing was saved and how the owner
 fixes it. There is no delete or forget tool. Deleting stays with the owner, in the Membase app.

@@ -38,7 +38,14 @@ class FakeMembase:
         self.partial: list[dict[str, Any]] = []
         self.status: dict[str, int] = {}  # path -> forced status
         self.delay: float = 0.0
-        self.profile = {"static": ["Works in Berlin"], "dynamic": ["Prefers dark mode"], "results": []}
+        self.profile = {
+            "items": [
+                {"id": "pf_Mg", "content": "Works in Berlin", "source_kind": "user_stated"},
+                {"id": "pf_MQ", "content": "Prefers dark mode", "source_kind": "user_stated"},
+            ],
+            "has_more": False,
+            "partial": [],
+        }
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content) if request.content else None
@@ -63,7 +70,7 @@ class FakeMembase:
             if extra := set(body) - {"q", "limit", "mode"}:
                 return _error(422, "validation", f"unknown fields: {sorted(extra)}")
             return httpx.Response(200, json={"items": self.results, "partial": self.partial})
-        if path == "/v1/profile":
+        if path == "/v1/profile-facts":
             return httpx.Response(200, json=self.profile)
         if path == "/v1/memories/add" and request.method == "POST":
             if extra := set(body) - {"content", "title"}:

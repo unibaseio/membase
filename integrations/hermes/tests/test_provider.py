@@ -269,14 +269,13 @@ def test_save_with_a_read_only_key_is_refused_clearly(manager, fake):
 
 def test_profile_tool(manager, fake):
     mgr, _ = manager()
-    out = tool(mgr, "membase_profile", query="travel")
-    assert out["static"] == ["Works on the ledger service."]
-    assert out["dynamic"] == ["Planning a trip to Lisbon."]
-    assert fake.calls("GET", "/v1/profile")[0].url.params["q"] == "travel"
+    out = tool(mgr, "membase_profile")
+    assert out == {"facts": ["Works on the ledger service.", "Planning a trip to Lisbon."]}
+    assert len(fake.calls("GET", "/v1/profile-facts")) == 1
 
 
 def test_profile_not_ticked_on_the_key(manager, fake):
-    fake.fail["/v1/profile"] = 403
+    fake.fail["/v1/profile-facts"] = 403
     mgr, _ = manager()
     assert "does not include the profile" in tool(mgr, "membase_profile")["error"]
 

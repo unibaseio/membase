@@ -90,6 +90,9 @@ class FakeEngine:
             for d in self.docs.values() if words & set((d.text or "").lower().split())
         ])
 
+    def answer_detail(self, q):
+        return SimpleNamespace(answer="Postgres.")
+
     def save(self) -> None:
         pass
 
@@ -124,10 +127,45 @@ def test_an_empty_store_lists_nothing(local):
     assert local.memories.list() == EMPTY_LIST
     assert local.documents.list() == EMPTY_LIST
     assert local.media.list() == EMPTY_LIST
-    assert local.rules()["rules"] == []
+    assert local.profile_facts.list() == EMPTY_LIST
     caps = local.capabilities()
-    assert {"search", "memories.list", "memories.add", "memories.forget", "documents.add"} <= set(caps["actions"])
+    assert {"search", "ask", "memories.list", "memories.add", "memories.forget", "documents.add",
+            "profile_facts.list", "profile_facts.add", "profile_facts.forget"} <= set(caps["actions"])
     assert caps["memories"] == []
+    assert caps["rules"] == {"citation_required": False, "retention_notice": "", "version": ""}
+
+
+def test_profile_facts_round_trip(local):
+    added = local.profile_facts.add("Prefers dark mode.")
+    assert added["id"].startswith("pf_") and added["created"] is True
+    assert added["source_kind"] == "user_stated" and added["content"] == "Prefers dark mode."
+    again = local.profile_facts.add("Prefers dark mode.")
+    assert again["id"] == added["id"] and again["created"] is False
+    local.profile_facts.add("Works on the ledger service.")
+    listed = local.profile_facts.list()
+    assert [f["content"] for f in listed["items"]] == ["Works on the ledger service.", "Prefers dark mode."]
+    assert local.profile_facts.list(limit=1)["has_more"] is True
+
+    with pytest.raises(ConfirmationRequiredError) as e:
+        local.profile_facts.forget(added["id"])
+    assert e.value.details["id"] == added["id"] and e.value.details["verb"] == "forget_profile_fact"
+    assert len(local.profile_facts.list()["items"]) == 2
+    assert local.profile_facts.forget(added["id"], confirm=True) == {"id": added["id"], "status": "forgotten"}
+    assert [f["content"] for f in local.profile_facts.list()["items"]] == ["Works on the ledger service."]
+    for gone in (added["id"], "pf_nope", ids.encode("memory", "default:1")):
+        with pytest.raises(NotFoundError):
+            local.profile_facts.forget(gone, confirm=True)
+
+    r = local._http.post("/v1/profile-facts/add", json={"content": "x", "kind": "imported"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "validation"
+
+
+def test_ask_answers_from_the_best_memory(faked):
+    faked.memories.add("We picked Postgres for the ledger")
+    out = faked.ask("postgres ledger")
+    assert out == {"answer": "Postgres.", "citations": [{"memory_name": "default"}], "partial": []}
+    r = faked._http.post("/v1/ask", json={"message": "x", "model": "gpt"})
+    assert r.status_code == 422 and r.json()["error"]["code"] == "validation"
 
 
 def test_a_fact_round_trip(faked):
@@ -261,6 +299,8 @@ def test_unknown_fields_are_refused(local, path, body):
 
 def test_the_retired_routes_are_gone(local):
     assert local._http.get("/v1/containers").status_code == 404
+    assert local._http.get("/v1/profile").status_code == 404
+    assert local._http.get("/v1/rules").status_code == 404
     # writes are POST + an action; the old method on the old path is not allowed
     assert local._http.post("/v1/memories", json={"content": "x"}).status_code == 405
     assert local._http.post("/v1/documents", json={"content": "x"}).status_code == 405
@@ -301,7 +341,7 @@ def test_round_trip_through_the_engine(local):
     assert hits["items"] and "Postgres" in hits["items"][0]["content"]
     assert hits["items"][0]["memory_name"] == "default"
     answer = local.ask("Which database is the ledger on?")
-    assert "postgres" in answer["answer"].lower()
+    assert "postgres" in answer["answer"].lower() and answer["citations"] == [{"memory_name": "default"}]
     fact = next(i for i in hits["items"] if i["type"] == "memory")
     with pytest.raises(ConfirmationRequiredError):
         local.memories.forget(fact["id"])

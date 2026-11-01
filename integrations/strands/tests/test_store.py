@@ -142,8 +142,7 @@ def test_membase_profile_tool(fake, client):
     make_agent(MembaseMemoryStore(client=client), model, injection=False)("who am I?")
 
     result = tool_result_text(model.seen[1])
-    assert "Standing facts:\n- Works in Berlin" in result
-    assert "Recently changed:\n- Started learning Go" in result
+    assert "About the user:\n- Works in Berlin\n- Started learning Go" in result
 
 
 def test_tools_turn_a_403_into_a_clear_sentence(fake, client):
@@ -152,7 +151,7 @@ def test_tools_turn_a_403_into_a_clear_sentence(fake, client):
     make_agent(MembaseMemoryStore(client=client), model, injection=False)("who am I?")
 
     assert "this Membase key was narrowed or revoked" in tool_result_text(model.seen[1])
-    assert len(fake.calls("/v1/profile")) == 1  # never retried
+    assert len(fake.calls("/v1/profile-facts")) == 1  # never retried
 
 
 def test_tool_selection(client):

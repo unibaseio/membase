@@ -56,8 +56,11 @@ describe("Membase", () => {
       { status: 200, body: { id: "med_eA", kind: "image", memory_name: "Trip", summary: "" } },
       { status: 200, body: { items: [], partial: [] } },
       { status: 200, body: { id: "med_eA", status: "deleted" } },
-      { status: 200, body: { static: [], dynamic: [] } },
-      { status: 200, body: { principal: "apikey", surfaces: [], tools: [], actions: ["search"] } },
+      { status: 200, body: { items: [], has_more: false, partial: [] } },
+      { status: 200, body: { id: "pf_eA", content: "Prefers dark mode.", source_kind: "user_stated", recorded_at: null, created: true } },
+      { status: 200, body: { id: "pf_eA", status: "forgotten" } },
+      { status: 200, body: { answer: "Postgres.", citations: [{ memory_name: "Work" }], partial: [] } },
+      { status: 200, body: { actions: ["search"], memories: [], rules: { citation_required: false, retention_notice: "", version: "" }, features: [] } },
     ]);
     const c = new Membase({ apiKey: "mbk_test", baseUrl: "https://api.example.test/", fetch: fetchImpl, maxRetries: 0 });
 
@@ -81,7 +84,10 @@ describe("Membase", () => {
     await c.media.get("med_eA");
     await c.media.search({ q: "skiing", kind: "video" });
     await c.media.delete("med_eA", { confirm: true });
-    await c.profile({ q: "hours" });
+    await c.profileFacts.list({ limit: 5 });
+    expect((await c.profileFacts.add({ content: "Prefers dark mode." })).created).toBe(true);
+    expect(await c.profileFacts.forget("pf_eA", { confirm: true })).toEqual({ id: "pf_eA", status: "forgotten" });
+    expect((await c.ask({ message: "Which database?" })).citations).toEqual([{ memory_name: "Work" }]);
     expect((await c.capabilities()).actions).toEqual(["search"]);
 
     const seen = calls.map((x) => [x.init.method, x.url.pathname + x.url.search, x.init.body ? JSON.parse(String(x.init.body)) : undefined]);
@@ -100,7 +106,10 @@ describe("Membase", () => {
       ["GET", "/v1/media/med_eA", undefined],
       ["POST", "/v1/media/search", { q: "skiing", kind: "video" }],
       ["POST", "/v1/media/med_eA/delete?confirm=true", undefined],
-      ["GET", "/v1/profile?q=hours", undefined],
+      ["GET", "/v1/profile-facts?limit=5", undefined],
+      ["POST", "/v1/profile-facts/add", { content: "Prefers dark mode." }],
+      ["POST", "/v1/profile-facts/pf_eA/forget?confirm=true", undefined],
+      ["POST", "/v1/ask", { message: "Which database?" }],
       ["GET", "/v1/capabilities", undefined],
     ]);
     for (const x of calls) {

@@ -385,32 +385,27 @@ def test_save_requires_content(executor, membase):
 
 
 PROFILE = {
-    "available": True,
-    "ready": True,
-    "static": ["Name is Ada.", "Prefers dark mode."],
-    "dynamic": [{"id": "3", "content": "Working on the ledger.", "updated_at": "2026-10-19"}],
+    "items": [
+        {"id": "pf_Mg", "content": "Name is Ada.", "source_kind": "user_stated"},
+        {"id": "pf_MQ", "content": "Prefers dark mode.", "source_kind": "imported"},
+    ],
+    "has_more": False,
+    "partial": [],
 }
 
 
-def test_profile_lists_standing_and_recent_facts(executor, membase):
-    membase.on("GET", "/v1/profile", (200, PROFILE))
+def test_profile_lists_the_profile_facts(executor, membase):
+    membase.on("GET", "/v1/profile-facts", (200, PROFILE))
     text, data = invoke(executor, "get_profile", {})
-    assert "Standing facts:\n- Name is Ada.\n- Prefers dark mode." in text
-    assert "Recently changed:\n- Working on the ledger." in text
+    assert text == "About the user:\n- Name is Ada.\n- Prefers dark mode."
     assert data == PROFILE
-    assert membase.calls("GET", "/v1/profile")[0].url.params.get("q") is None
+    assert len(membase.calls("GET", "/v1/profile-facts")) == 1
 
 
-def test_profile_with_a_topic_cites_memories(executor, membase):
-    # The profile's topic results keep the search passages' former shape (container_name).
-    passage = {
-        "content": "We settled on Postgres for the ledger.",
-        "container_name": "Project decisions",
-    }
-    membase.on("GET", "/v1/profile", (200, {**PROFILE, "results": [passage]}))
-    text, _ = invoke(executor, "get_profile", {"query": "database"})
-    assert "- [Project decisions] We settled on Postgres for the ledger." in text
-    assert membase.calls("GET", "/v1/profile")[0].url.params["q"] == "database"
+def test_an_empty_profile_says_so(executor, membase):
+    membase.on("GET", "/v1/profile-facts", (200, {"items": [], "has_more": False, "partial": []}))
+    text, _ = invoke(executor, "get_profile", {})
+    assert text == "The profile is empty."
 
 
 def test_profile_not_granted(executor, membase):
@@ -418,29 +413,19 @@ def test_profile_not_granted(executor, membase):
 
     membase.on(
         "GET",
-        "/v1/profile",
+        "/v1/profile-facts",
         (
             403,
             {
                 "error": {
                     "code": "unauthorized",
-                    "message": "tool 'get_profile' is not in this agent's capability profile",
+                    "message": "tool 'list_profile_facts' is not in this capability profile",
                 }
             },
         ),
     )
     with pytest.raises(MembaseToolError, match="did not grant the profile"):
         invoke(executor, "get_profile", {})
-
-
-def test_profile_that_could_not_be_read_says_so(executor, membase):
-    membase.on(
-        "GET",
-        "/v1/profile",
-        (200, {"available": False, "reason": "no agent container", "static": [], "dynamic": []}),
-    )
-    text, _ = invoke(executor, "get_profile", {})
-    assert text == "The profile could not be read right now: no agent container."
 
 
 def test_the_membase_com_api_host_is_accepted(executor, membase):

@@ -28,14 +28,14 @@ describe("@unibaseio/membase against a live server", () => {
     expect(one.memory_name).toBeTruthy();
   });
 
-  it("searches, lists facts and reads the profile", async () => {
+  it("searches, lists facts and lists the profile facts", async () => {
     const hits = await c.search({ q: "pricing", limit: 3 });
     expect(Array.isArray(hits.items)).toBe(true);
     expect(Array.isArray(hits.partial)).toBe(true);
     const facts = await c.memories.list({ limit: 5 });
     expect(facts).toHaveProperty("has_more");
-    const p = await c.profile();
-    expect(p).toHaveProperty("static");
+    const p = await c.profileFacts.list({ limit: 5 });
+    expect(p).toHaveProperty("has_more");
   });
 
   it("saves a fact as a note", async () => {

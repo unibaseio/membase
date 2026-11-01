@@ -31,7 +31,7 @@ def test_typescript_client_against_local_server(tmp_path):
         r = subprocess.run(["npx", "vitest", "run", "src/local.test.ts"], cwd=TS, env=env,
                            capture_output=True, text=True, timeout=300)
         assert r.returncode == 0, r.stdout + r.stderr
-        assert "2 passed" in r.stdout, r.stdout
+        assert "3 passed" in r.stdout, r.stdout
     finally:
         httpd.shutdown()
         httpd.backend.close()

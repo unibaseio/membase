@@ -13,8 +13,9 @@ pytest.importorskip("mcp", reason="needs the mcp extra")
 pytest.importorskip("membase_core", reason="needs the local extra")
 
 PROTOCOL_TOOLS = {
-    "search_memories", "get_profile", "list_documents", "memory_rules",
-    "add_memory", "add_document", "delete_document", "forget_memory", "ask_agent",
+    "get_capabilities", "search_memories", "ask_memory", "list_memories", "get_memory", "add_memory",
+    "forget_memory", "list_profile_facts", "add_profile_fact", "forget_profile_fact", "list_documents",
+    "get_document", "add_document", "delete_document",
 }
 MEDIA_TOOLS = {"add_media", "list_media", "get_media", "search_media", "ask_media", "delete_media"}
 

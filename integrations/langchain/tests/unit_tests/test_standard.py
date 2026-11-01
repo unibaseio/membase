@@ -70,7 +70,7 @@ class _Save(_ToolParams):
 class _Profile(_ToolParams):
     tool_class = MembaseProfileTool
     tool_name = "membase_profile"
-    example = {"topic": "working hours"}
+    example = {}
 
 
 class TestSearchToolUnit(_Search, ToolsUnitTests):

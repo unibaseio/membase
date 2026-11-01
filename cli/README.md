@@ -23,12 +23,12 @@ export MEMBASE_API_KEY="mbk_…"             # Connect › Developer keys in the
 
 membase add "We picked Postgres for the ledger"
 membase search "what did we pick for the ledger?"
-membase ask "Which database is the ledger on?"
 membase documents add notes/design.md
 membase documents list --kind file
 membase memories list --limit 20
 membase forget mem_… --confirm
-membase profile
+membase profile-facts list                 # who the user is (the key needs Your profile ticked)
+membase capabilities                       # what this key may do, and the rules
 ```
 
 Every command prints JSON. `--api-key` and `--base-url` override `MEMBASE_API_KEY` and

@@ -91,7 +91,7 @@ user asked for.
 |---|---|
 | `membase_search(query, limit=None)` | Passages from every Memory the key reaches, each tagged `[Memory name]`; names any Memory that could not answer. |
 | `membase_save(content)` | Saves one fact in the user's words, into the key's write target. A key that reaches several Memories has no write target: the tool says so and that nothing was saved. |
-| `membase_profile(topic=None)` | The user's standing and recently changed facts. Needs a key whose owner ticked the profile. |
+| `membase_profile()` | The user's profile facts: standing statements about who they are, newest first. Needs a key whose owner ticked **Your profile**. |
 
 `membase_tools(memory, save=False)` leaves out the save tool (for a Read key) and
 `profile=False` leaves out the profile tool. There is no delete or forget tool. Tool calls use

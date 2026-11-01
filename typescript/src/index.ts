@@ -16,7 +16,10 @@ export type {
   MediaItem,
   MediaSearchResult,
   Removed,
-  Profile,
+  ProfileFact,
+  ProfileFactAdded,
+  Rules,
+  Answer,
   Capabilities,
   Json,
 } from "./client.js";

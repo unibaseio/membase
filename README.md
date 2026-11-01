@@ -81,7 +81,8 @@ m = Membase()                    # hosted
 m.memories.add("We picked Postgres for the ledger service.")   # a fact
 m.search("what database is the ledger on?")                    # {"items": [...], "partial": [...]}
 m.add("Design notes …", custom_id="design-1")                   # a document
-m.ask("Which database did we choose for the ledger?")
+m.profile_facts.list()                                         # who the user is (Your profile ticked)
+m.capabilities()                                               # what this key may do, and the rules
 ```
 
 No call names a Memory: reads cover every Memory the key reaches, and writes land in its write

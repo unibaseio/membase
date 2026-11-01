@@ -1,8 +1,10 @@
 """The ids local memory hands out, spelled as the hosted API spells them: one typed prefix per
-resource (``mem_`` a fact, ``doc_`` a document, ``med_`` a photo or video), opaque after it.
+resource (``mem_`` a fact, ``pf_`` a profile fact, ``doc_`` a document, ``med_`` a photo or video),
+opaque after it.
 
 Behind the prefix is the id the store already uses (``<container>:<n>`` for a fact,
-``<container>:<doc id>`` for a document, ``<container>:<media id>`` for media), so nothing is kept
+``<container>:<doc id>`` for a document, ``<container>:<media id>`` for media, ``profile:<n>`` for a
+profile fact), so nothing is kept
 to translate one into the other. A string that is not one of ours names nothing: it reads as not
 found, the same as an id for something deleted.
 """
@@ -14,9 +16,9 @@ from typing import Literal
 
 from .backend import LocalError
 
-Kind = Literal["memory", "document", "media"]
+Kind = Literal["memory", "profile_fact", "document", "media"]
 
-PREFIX: dict[str, str] = {"memory": "mem", "document": "doc", "media": "med"}
+PREFIX: dict[str, str] = {"memory": "mem", "profile_fact": "pf", "document": "doc", "media": "med"}
 
 
 def encode(kind: Kind, internal: str) -> str:

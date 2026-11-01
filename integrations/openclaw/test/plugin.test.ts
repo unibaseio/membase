@@ -253,15 +253,20 @@ describe("membase_save", () => {
 });
 
 describe("membase_profile", () => {
-  it("formats standing and recent facts", async () => {
+  it("lists the profile facts", async () => {
     const { rec, calls } = setup({}, () => ({
-      json: { static: ["Works in Berlin"], dynamic: [{ id: 1, content: "Now on the ledger project" }] },
+      json: {
+        items: [
+          { id: "pf_Mg", content: "Works in Berlin", source_kind: "user_stated" },
+          { id: "pf_MQ", content: "Now on the ledger project", source_kind: "user_stated" },
+        ],
+        has_more: false,
+        partial: [],
+      },
     }));
-    const out = await tool(rec, "membase_profile", ownerCtx())!.execute("c", { query: "work" });
-    expect(calls[0]).toMatchObject({ method: "GET", path: "/v1/profile" });
-    expect(calls[0].url.searchParams.get("q")).toBe("work");
-    expect(textOf(out as any)).toContain("- Works in Berlin");
-    expect(textOf(out as any)).toContain("- Now on the ledger project");
+    const out = await tool(rec, "membase_profile", ownerCtx())!.execute("c", {});
+    expect(calls[0]).toMatchObject({ method: "GET", path: "/v1/profile-facts" });
+    expect(textOf(out as any)).toBe("About the user:\n- Works in Berlin\n- Now on the ledger project");
   });
 
   it("a 403 names Profile access", async () => {

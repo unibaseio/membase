@@ -3,8 +3,8 @@
 [Membase](https://membase.com) long-term memory for LangChain and LangGraph (Python).
 
 Membase keeps a person's memory in their own account: named **Memories** that learn from
-their notes, files and conversations, plus a **profile** of standing facts. This
-package gives a LangChain app three ways to use it:
+their notes, files and conversations, plus a **profile** of standing statements about them.
+This package gives a LangChain app three ways to use it:
 
 | Piece | LangChain type | What it does |
 |---|---|---|
@@ -84,7 +84,7 @@ agent.invoke({"messages": [{"role": "user", "content": "What did we pick for the
 |---|---|---|
 | `membase_search` | `query` | passages from every Memory in reach as `- [Memory name] text`; the raw response is the `ToolMessage` artifact; Memories that could not answer (or whose passages did not fit `k`) are reported |
 | `membase_save` | `content` (the user's words) | the description tells the model to save **only when the user asks**; the fact lands in the key's write target; a key with no write target (it reaches several Memories) gets a clear refusal and nothing is saved |
-| `membase_profile` | optional `topic` | standing and recently changed facts; only for a key whose owner ticked the profile |
+| `membase_profile` | none | the profile facts: standing statements about who the user is, newest first; only for a key whose owner ticked **Your profile** |
 
 `MembaseToolkit(save=False, profile=False)` (or `membase_tools(client, save=False, profile=False)`) leaves tools out; `k=` sets
 the number of passages. Errors come back as the tool's answer (`handle_tool_error=True`), so the model can

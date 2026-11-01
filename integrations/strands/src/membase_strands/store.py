@@ -343,17 +343,13 @@ class MembaseMemoryStore(MemoryStore):
             @tool(
                 name="membase_profile",
                 description=(
-                    "Read the user's Membase profile: standing facts about who they are and recent changes. "
-                    "Call once near the start of a conversation, optionally with a topic."
+                    "Read the user's Membase profile: standing statements about who they are (name, role, "
+                    "lasting preferences), newest first. Call once near the start of a conversation."
                 ),
             )
-            async def membase_profile(topic: str | None = None) -> str:
-                """Read the Membase profile.
-
-                Args:
-                    topic: Optional topic to pull relevant profile facts for.
-                """
-                return await _tool_call(lambda: _format_profile(store.client.profile(q=topic or None)))
+            async def membase_profile() -> str:
+                """Read the Membase profile facts."""
+                return await _tool_call(lambda: _format_profile(store.client.profile_facts.list()))
 
             tools.append(membase_profile)
 
@@ -440,19 +436,11 @@ def _format_saved(result: dict[str, Any] | None) -> str:
 
 
 def _format_profile(result: dict[str, Any]) -> str:
-    sections = []
-    for key, title in (("static", "Standing facts"), ("dynamic", "Recently changed"), ("results", "On this topic")):
-        items = [_profile_item(x) for x in result.get(key) or []]
-        items = [x for x in items if x]
-        if items:
-            sections.append(f"{title}:\n" + "\n".join(f"- {x}" for x in items))
-    return "\n\n".join(sections) or "The Membase profile is empty."
-
-
-def _profile_item(item: Any) -> str:
-    if isinstance(item, dict):
-        return str(item.get("content") or item.get("fact") or item.get("text") or "").strip()
-    return str(item).strip()
+    facts = [str(f.get("content") or "").strip() for f in result.get("items") or []]
+    facts = [f for f in facts if f]
+    if not facts:
+        return "The Membase profile is empty."
+    return "About the user:\n" + "\n".join(f"- {f}" for f in facts)
 
 
 async def _tool_call(call: Callable[[], str]) -> str:

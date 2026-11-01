@@ -17,7 +17,6 @@ DEFAULT_CONTAINER = "default"
 _PROFILE = "__profile__"
 _LIMIT_MAX = 50
 _LIMIT_FLOOR = 8
-_DYNAMIC = 10
 _ROLE_LINE = re.compile(r"(?m)^\s*\**\s*(user|assistant|human|ai|claude|chatgpt|you|me)\s*\**\s*:", re.I)
 
 
@@ -246,26 +245,42 @@ class LocalBackend:
             ],
         }
 
-    def profile(self, q: str | None = None) -> dict:
-        out: dict[str, Any] = {"available": True, "ready": True, "static": [], "dynamic": []}
-        if (self._dir(_PROFILE) / "memory.db").exists():
-            engine, _ = self.engine(_PROFILE)
-            out["static"] = [p["description"] for p in engine.profile() if p["category"] == "static"]
-        recent: list[dict] = []
-        for cid in self._ids():
-            engine, _ = self.engine(cid)
-            recent += [
-                {"id": f"{cid}:{e['id']}", "content": e["content"], "updated_at": e["created_at"],
-                 "title": e["title"], "session_date": e["session_date"]}
-                for e in engine.episodes(limit=_DYNAMIC)
-            ]
-        out["dynamic"] = sorted(recent, key=lambda e: str(e["updated_at"] or ""), reverse=True)[:_DYNAMIC]
-        if (q or "").strip():
-            out["results"] = self.search(q or "")["results"]
-        return out
+    # ---- the user's profile: standing statements, the store's rather than a container's -------
 
-    def rules(self) -> dict:
-        return {"rules": [], "local": True}
+    def profile_facts(self, limit: int = 100) -> dict:
+        """The statements, newest first: ``{items: [{id, content, source_kind, updated_at}],
+        has_more}``; ``id`` is the engine's, stable for the statement's life."""
+        if not (self._dir(_PROFILE) / "memory.db").exists():
+            return {"items": [], "has_more": False}
+        engine, _ = self.engine(_PROFILE)
+        return engine.profile_facts(limit=limit)
+
+    def add_profile_fact(self, content: str) -> dict:
+        """Keep one statement the user made; the same text again keeps the one there
+        (``created: False``)."""
+        if not (content or "").strip():
+            raise LocalError(400, "validation", "a profile fact needs content")
+        engine, lock = self.engine(_PROFILE)
+        with lock:
+            return engine.add_profile_fact(content.strip(), kind="user_stated")
+
+    def forget_profile_fact(self, fact_id: int, confirm: bool = False) -> dict:
+        """Forget one statement, durably, before answering."""
+        missing = LocalError(404, "not_found", "profile fact not found", {"id": fact_id})
+        if not (self._dir(_PROFILE) / "memory.db").exists():
+            raise missing
+        engine, lock = self.engine(_PROFILE)
+        with lock:
+            found = next((f for f in engine.profile_facts(limit=100000)["items"] if f["id"] == fact_id), None)
+            if found is None:
+                raise missing
+            if not confirm:
+                return self._confirmation_required(
+                    "forget_profile_fact", {"content": found["content"]},
+                    "Pass confirm=true to forget this profile fact.",
+                )
+            engine.forget_profile_fact(fact_id)
+        return {"status": "forgotten", "id": fact_id}
 
     # ---- facts: what each container learned -------------------------------------------------
 
@@ -472,16 +487,9 @@ class LocalBackend:
         text = f"{title}\n\n{content}" if title else content
         return [{"role": "user", "content": text}]
 
-    def add_memory(
-        self, content: str, container: str | None = None, static: bool = False, title: str = ""
-    ) -> dict:
+    def add_memory(self, content: str, container: str | None = None, title: str = "") -> dict:
         if not (content or "").strip():
             raise LocalError(400, "validation", "content is required")
-        if static:
-            engine, lock = self.engine(_PROFILE)
-            with lock:
-                engine.add_profile_fact(content.strip())
-            return {"static": True, "status": "recorded", "content": content}
         cid = self._resolve(container, create=True)
         engine, lock = self.engine(cid)
         sid = f"mem-{uuid.uuid4().hex[:12]}"
@@ -500,7 +508,6 @@ class LocalBackend:
             "memory_ids": memory_ids,
             "container": cid,
             "status": "learned",
-            "static": False,
             "extracted": result.counts,
         }
 
@@ -561,25 +568,18 @@ class LocalBackend:
                 best, best_score = cid, score
         return best
 
-    def ask(self, message: str, model: str | None = None, container: str | None = None) -> dict:
+    def ask(self, message: str) -> dict:
+        """One answer, written by the engine from the container whose facts match ``message``
+        best: ``{answer, container}`` (``container`` None when the store has none)."""
         if not (message or "").strip():
             raise LocalError(400, "validation", "message is required")
-        cid = self._resolve(container) if container else self._best_container(message)
+        cid = self._best_container(message)
         if cid is None or not self._exists(cid):
-            return {"answer": "Not answerable from memory.", "citations": [], "container": cid}
+            return {"answer": "Not answerable from memory.", "container": None}
         engine, lock = self.engine(cid)
         with lock:
-            previous = engine.reader_model
-            engine.reader_model = model or previous
-            try:
-                detail = engine.answer_detail(message)
-            finally:
-                engine.reader_model = previous
-        return {
-            "answer": detail.answer,
-            "citations": [c.text for c in detail.retrieval.observations_top[:5]],
-            "container": cid,
-        }
+            detail = engine.answer_detail(message)
+        return {"answer": detail.answer, "container": cid}
 
 
     def agent_ingest(self, messages: list[dict], *, agent_id: str, session_id: str | None = None,

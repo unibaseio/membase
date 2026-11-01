@@ -338,27 +338,67 @@ def _capabilities(b: LocalBackend, q: _Query, body: _Body, _m) -> Any:
 
     media = media_unavailable() is None
     actions = [a for a in ACTIONS if media or not a.startswith("media.")]
-    tools = sorted({ACTIONS[a] for a in actions} | {"get_profile", "memory_rules", "ask_agent"})
+    tools = sorted({ACTIONS[a] for a in actions})
     memories = [{"name": b._meta(cid)["name"], "kind": "text"} for cid in b._ids()]
     if media:
         memories += [{"name": b._meta(cid)["name"], "kind": "media"} for cid in b.media._ids()]
-    return {"principal": "local", "surfaces": ["rest"], "tools": tools, "features": [],
-            "actions": sorted(actions), "memories": memories}
+    return {"actions": sorted(actions), "memories": memories, "rules": dict(RULES), "features": [],
+            "principal": "local", "surfaces": ["rest"], "tools": tools}
 
 
 def _ask(b: LocalBackend, q: _Query, body: _Body, _m) -> Any:
-    body = _only(body, {"message", "model"})
-    return b.ask(body.get("message") or "", model=body.get("model"))
+    body = _only(body, {"message"}, required=("message",))
+    out = b.ask(_text(body, "message", max_length=4000))
+    name = _names(b).get(out.get("container") or "", "")
+    return {"answer": out["answer"], "citations": [{"memory_name": name}] if name else [], "partial": []}
+
+
+def _profile_fact_out(row: dict) -> dict:
+    return {
+        "id": ids.encode("profile_fact", f"profile:{row['id']}"),
+        "content": row.get("content") or "",
+        "source_kind": row.get("source_kind") or "user_stated",
+        "recorded_at": row.get("updated_at"),
+    }
+
+
+def _list_profile_facts(b: LocalBackend, q: _Query, body: _Body, _m) -> Any:
+    out = b.profile_facts(limit=_list_limit(q))
+    return {"items": [_profile_fact_out(r) for r in out["items"]], "has_more": out["has_more"], "partial": []}
+
+
+def _add_profile_fact(b: LocalBackend, q: _Query, body: _Body, _m) -> Any:
+    body = _only(body, {"content"}, required=("content",))
+    row = b.add_profile_fact(_text(body, "content", max_length=2000))
+    return {**_profile_fact_out(row), "created": bool(row.get("created"))}
+
+
+def _forget_profile_fact(b: LocalBackend, q: _Query, body: _Body, m) -> Any:
+    def forget() -> dict:
+        _, raw = ids.decode("profile_fact", m["id"])
+        if not raw.isdigit():
+            raise LocalError(404, "not_found", "profile fact not found", {"id": m["id"]})
+        return b.forget_profile_fact(int(raw), confirm=_truthy(q.get("confirm")))
+
+    return _confirm_or(_named(m["id"], forget), m["id"], "forgotten")
+
+
+#: The standing rules local memory carries: none (no one else's credential reads it).
+RULES = {"citation_required": False, "retention_notice": "", "version": ""}
 
 
 #: Each action of the memory API and the protocol grant it stands on, as hosted; local memory holds
 #: every one (the media ones with the media extra installed).
 ACTIONS: dict[str, str] = {
     "search": "search_memories",
-    "memories.list": "search_memories",
-    "memories.get": "search_memories",
+    "ask": "ask_memory",
+    "memories.list": "list_memories",
+    "memories.get": "get_memory",
     "memories.add": "add_memory",
     "memories.forget": "forget_memory",
+    "profile_facts.list": "list_profile_facts",
+    "profile_facts.add": "add_profile_fact",
+    "profile_facts.forget": "forget_profile_fact",
     "documents.list": "list_documents",
     "documents.get": "get_document",
     "documents.add": "add_document",
@@ -379,8 +419,9 @@ ROUTES: list[tuple[str, re.Pattern, Callable[..., Any], int]] = [
     ("POST", re.compile(r"^/v1/documents/add$"), _add_document, 202),
     ("GET", re.compile(r"^/v1/documents/(?P<id>[^/]+)$"), _get_document, 200),
     ("POST", re.compile(r"^/v1/documents/(?P<id>[^/]+)/delete$"), _delete_document, 200),
-    ("GET", re.compile(r"^/v1/profile$"), lambda b, q, body, m: b.profile(q.get("q")), 200),
-    ("GET", re.compile(r"^/v1/rules$"), lambda b, q, body, m: b.rules(), 200),
+    ("GET", re.compile(r"^/v1/profile-facts$"), _list_profile_facts, 200),
+    ("POST", re.compile(r"^/v1/profile-facts/add$"), _add_profile_fact, 200),
+    ("POST", re.compile(r"^/v1/profile-facts/(?P<id>[^/]+)/forget$"), _forget_profile_fact, 200),
     ("POST", re.compile(r"^/v1/ask$"), _ask, 200),
     ("GET", re.compile(r"^/v1/capabilities$"), _capabilities, 200),
 ]

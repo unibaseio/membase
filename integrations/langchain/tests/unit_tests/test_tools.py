@@ -95,11 +95,12 @@ def test_save_with_a_read_key_is_refused_clearly(fake: FakeMembase) -> None:
 
 
 def test_profile(fake: FakeMembase) -> None:
-    msg = call(MembaseProfileTool(client=fake.client()), {"topic": "books"})
-    assert "Standing facts:\n- The user behind mbk_alice prefers dark mode." in msg.content
-    assert "Recently changed:\n- Started reading" in msg.content
-    assert "Relevant to the topic:\n- [Project decisions]" in msg.content
-    assert fake.requests[-1]["params"] == {"q": "books"}
+    msg = call(MembaseProfileTool(client=fake.client()), {})
+    assert msg.content == (
+        "About the user:\n- The user behind mbk_alice prefers dark mode.\n"
+        "- Started reading Gödel, Escher, Bach."
+    )
+    assert fake.requests[-1]["path"] == "/v1/profile-facts"
 
 
 def test_profile_not_granted(fake: FakeMembase) -> None:

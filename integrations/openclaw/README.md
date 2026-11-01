@@ -8,7 +8,7 @@ other AIs before each turn, and gives the agent three tools:
 |---|---|
 | `membase_search` | Searches your Memories; every passage names the Memory it came from. |
 | `membase_save` | Saves a note, **only when you ask the agent to remember something**, in your words. |
-| `membase_profile` | Reads who you are (standing and recently changed facts), when the key has Profile access. |
+| `membase_profile` | Reads who you are (your profile facts, newest first), when the key has Profile access. |
 
 There is no delete or forget tool. Removing memory stays in the Membase app.
 

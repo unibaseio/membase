@@ -62,20 +62,16 @@ class FakeMembase:
                     "memories": [{"name": m, "kind": "text"} for m in self.memories],
                 },
             )
-        if path == "/v1/profile":
-            out: dict[str, Any] = {
-                "static": [f"The user behind {key} prefers dark mode."],
-                "dynamic": [{"id": "1", "content": "Started reading Gödel, Escher, Bach."}],
-            }
-            if request.url.params.get("q"):
-                # The profile's results keep the search hit shape that names container_name.
-                out["results"] = [
-                    {
-                        "content": f"About {request.url.params['q']!r}",
-                        "container_name": self.memories[0],
-                    }
-                ]
-            return httpx.Response(200, json=out)
+        if path == "/v1/profile-facts":
+            facts = [
+                f"The user behind {key} prefers dark mode.",
+                "Started reading Gödel, Escher, Bach.",
+            ]
+            items = [
+                {"id": f"pf_{i}", "content": c, "source_kind": "user_stated", "recorded_at": None}
+                for i, c in enumerate(facts)
+            ]
+            return httpx.Response(200, json={"items": items, "has_more": False, "partial": []})
         if path == "/v1/memories/add" and request.method == "POST":
             if key in self.read_only_keys:
                 return _error(

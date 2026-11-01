@@ -16,7 +16,6 @@ from ._common import (
     ClientFor,
     MembaseClientMixin,
     describe_error,
-    format_passages,
     format_search,
     user_id_from,
 )
@@ -120,36 +119,31 @@ def _saved(resp: dict[str, Any]) -> str:
 
 
 class MembaseProfileInput(BaseModel):
-    topic: str | None = Field(
-        default=None,
-        description="Optional current topic, to also get the profile passages relevant to it.",
-    )
+    """The profile tool takes no arguments."""
 
 
 class MembaseProfileTool(_MembaseTool):
-    """Who the user is: standing facts and recently changed ones, from the Membase profile.
+    """Who the user is: the profile facts, standing statements from the Membase profile.
 
     Only works when the key's owner ticked the profile for it; otherwise Membase answers 403.
     """
 
     name: str = "membase_profile"
     description: str = (
-        "Read who the user is from their Membase profile: standing facts (name, role, lasting "
-        "preferences) and recently changed facts. Call it once near the start of a conversation, "
-        "optionally with the current topic."
+        "Read who the user is from their Membase profile: standing statements (name, role, "
+        "lasting preferences), newest first. Call it once near the start of a conversation."
     )
     args_schema: type[BaseModel] = MembaseProfileInput
 
     def _run(
         self,
-        topic: str | None = None,
         *,
         config: RunnableConfig,
         run_manager: CallbackManagerForToolRun | None = None,
     ) -> str:
         client = self._client_for_call(config)
         try:
-            resp = client.profile(q=topic or None)
+            resp = client.profile_facts.list()
         except PermissionDeniedError as e:
             raise ToolException(
                 describe_error(e) + " (A key reads the profile only if its owner ticked it.)"
@@ -159,27 +153,12 @@ class MembaseProfileTool(_MembaseTool):
         return _format_profile(resp or {})
 
 
-def _text(item: Any) -> str:
-    if isinstance(item, str):
-        return item.strip()
-    if isinstance(item, dict):
-        return str(item.get("content") or item.get("description") or item.get("text") or "").strip()
-    return str(item).strip()
-
-
 def _format_profile(resp: dict[str, Any]) -> str:
-    parts = []
-    static = [t for t in map(_text, resp.get("static") or []) if t]
-    dynamic = [t for t in map(_text, resp.get("dynamic") or []) if t]
-    if static:
-        parts.append("Standing facts:\n" + "\n".join(f"- {t}" for t in static))
-    if dynamic:
-        parts.append("Recently changed:\n" + "\n".join(f"- {t}" for t in dynamic))
-    if resp.get("results"):
-        passages = format_passages(resp["results"])
-        if passages:
-            parts.append("Relevant to the topic:\n" + passages)
-    return "\n\n".join(parts) or "The profile is empty."
+    facts = [str(f.get("content") or "").strip() for f in resp.get("items") or []]
+    facts = [f for f in facts if f]
+    if not facts:
+        return "The profile is empty."
+    return "About the user:\n" + "\n".join(f"- {f}" for f in facts)
 
 
 class MembaseToolkit(MembaseClientMixin, BaseToolkit):
