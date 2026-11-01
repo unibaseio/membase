@@ -64,7 +64,7 @@ class _Search(_ToolParams):
 class _Save(_ToolParams):
     tool_class = MembaseSaveTool
     tool_name = "membase_save"
-    example = {"content": "I prefer dark mode.", "static": True}
+    example = {"content": "I prefer dark mode."}
 
 
 class _Profile(_ToolParams):

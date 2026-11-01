@@ -7,7 +7,7 @@ other AIs before each turn, and gives the agent three tools:
 | Tool | What it does |
 |---|---|
 | `membase_search` | Searches your Memories; every passage names the Memory it came from. |
-| `membase_save` | Saves a note or a standing fact, **only when you ask the agent to remember something**, in your words. |
+| `membase_save` | Saves a note, **only when you ask the agent to remember something**, in your words. |
 | `membase_profile` | Reads who you are (standing and recently changed facts), when the key has Profile access. |
 
 There is no delete or forget tool. Removing memory stays in the Membase app.
@@ -38,8 +38,10 @@ OpenClaw asks you to accept the plugin's capabilities on install. In a script, p
 `--accept-capabilities`. Installing it selects it for the memory slot.
 
 Get a developer key in the Membase app under **Connect › Developer keys**. A **Read** key is
-enough to search. Choose **Read & write** if the agent should save. Tick **Profile** if it should
-read your profile. Then configure the plugin and select it for the memory slot:
+enough to search, across every Memory the key reaches. Choose **Read & write** if the agent
+should save: saves go to the key's write target, which is the one Memory a key reaches, so a key
+that saves should reach exactly one (a key reaching several is refused with "no write target" and
+saves nothing). Tick **Profile** if it should read your profile. Then configure the plugin and select it for the memory slot:
 
 ```json5
 // ~/.openclaw/openclaw.json
@@ -53,7 +55,6 @@ read your profile. Then configure the plugin and select it for the memory slot:
         hooks: { allowConversationAccess: true },
         config: {
           apiKey: "${MEMBASE_API_KEY}", // or a SecretRef; plain text works but is not advised
-          // container: "mv-...",      // default Memory for saves and automatic recall
         },
       },
     },
@@ -76,7 +77,6 @@ If `apiKey` is not set, the plugin uses the `MEMBASE_API_KEY` environment variab
 |---|---|---|
 | `apiKey` | `MEMBASE_API_KEY` | Membase developer key (`mbk_…`). Declared as a secret input, so SecretRefs work. |
 | `baseUrl` | `https://api.app.membase.com` | Another server, e.g. a local engine from `membase --local serve`. `MEMBASE_BASE_URL` also works. |
-| `container` | none (all Memories in reach) | Container id that `membase_save` writes to when the model names none, and the only one automatic recall searches. |
 | `recallBudgetMs` | `8000` | How long automatic recall may wait. After that the turn continues without memory. |
 | `autoRecall` | `true` | Search before each turn you send and add the passages as context. Needs `hooks.allowConversationAccess: true`. |
 | `autoCapture` | `false` | Before OpenClaw compacts a long session, ask the agent to save durable facts with `membase_save`. |
@@ -103,8 +103,9 @@ If `apiKey` is not set, the plugin uses the `MEMBASE_API_KEY` environment variab
   only Memory Core's local index, so it does not search Membase; use the agent or the Gateway
   method instead. Memory Core can keep running as OpenClaw's local consolidation sidecar.
 - **Errors.** A `403` means the key's owner narrowed or revoked it, or (for a save) that the key is
-  Read only. The tool says so and does not retry. A Memory that could not answer is reported as
-  such, not as "no memory".
+  Read only. A `422 write_target_required` on a save means the key reaches several Memories, so
+  nothing was saved. The tool says so and does not retry. A Memory that could not answer (the
+  search's `partial`) is reported as such, not as "no memory".
 - **Gateway `/tools/invoke`.** OpenClaw does not resolve a conversation audience for direct tool
   invocations, so the plugin falls back to OpenClaw's trusted owner flag: the Gateway's
   shared-secret operator can call the tools, and other callers cannot.

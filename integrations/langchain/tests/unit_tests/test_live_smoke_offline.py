@@ -30,7 +30,6 @@ def test_runs_end_to_end_offline(
 ) -> None:
     monkeypatch.setenv("MEMBASE_API_KEY", "mbk_smoke")
     monkeypatch.setenv("MEMBASE_SMOKE_WRITE", "1")
-    monkeypatch.setenv("MEMBASE_SMOKE_CONTAINER", "Reading notes")
     smoke = load_smoke()
     monkeypatch.setattr(smoke, "Membase", lambda **_: fake.client("mbk_smoke"))
     assert smoke.main() == 0
@@ -38,5 +37,5 @@ def test_runs_end_to_end_offline(
     assert "retriever: 5 documents" in out
     assert "[Project decisions]" in out
     assert "middleware: recall injected=True" in out
-    assert "save tool: Saved to Reading notes." in out
-    assert fake.requests[-1]["body"]["container"] == "mv-reading"
+    assert "save tool: Saved to Project decisions." in out
+    assert "container" not in fake.requests[-1]["body"]

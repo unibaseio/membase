@@ -15,10 +15,6 @@ export const CONFIG_JSON_SCHEMA = {
       type: "string",
       description: "API base URL; defaults to MEMBASE_BASE_URL, then https://api.app.membase.com.",
     },
-    container: {
-      type: "string",
-      description: "Default container id for saves and automatic recall.",
-    },
     recallBudgetMs: {
       type: "integer",
       minimum: 500,
@@ -48,7 +44,6 @@ export interface MembasePluginConfig {
   /** Undefined means the SDK reads `MEMBASE_API_KEY`. */
   apiKey?: string;
   baseUrl?: string;
-  container?: string;
   recallBudgetMs: number;
   autoRecall: boolean;
   autoCapture: boolean;
@@ -70,7 +65,6 @@ export function resolveConfig(raw: Record<string, unknown> | undefined): Membase
   return {
     apiKey: str(cfg.apiKey),
     baseUrl: str(cfg.baseUrl),
-    container: str(cfg.container),
     recallBudgetMs:
       typeof budget === "number" && Number.isFinite(budget) && budget > 0
         ? Math.floor(budget)

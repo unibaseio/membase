@@ -28,36 +28,41 @@ def test_membase_tools_has_no_destructive_tool(fake: FakeMembase) -> None:
         "membase_search"
     ]
     assert all(t.client is tools[0].client for t in tools)
-    toolkit = MembaseToolkit(client=fake.client(), container="mv-reading", k=3)
+    toolkit = MembaseToolkit(client=fake.client(), k=3)
     assert [t.name for t in toolkit.get_tools()] == [t.name for t in tools]
-    assert toolkit.get_tools()[0].k == 3 and toolkit.get_tools()[1].container == "mv-reading"
+    assert toolkit.get_tools()[0].k == 3
 
 
-def test_search_cites_container_and_keeps_raw_artifact(fake: FakeMembase) -> None:
+def test_no_tool_takes_a_container(fake: FakeMembase) -> None:
+    for tool in membase_tools(fake.client()):
+        assert "container" not in tool.args and "static" not in tool.args
+
+
+def test_search_cites_memory_and_keeps_raw_artifact(fake: FakeMembase) -> None:
     msg = call(MembaseSearchTool(client=fake.client(), k=2), {"query": "ledger"})
     assert msg.content.splitlines()[0].startswith("- [Project decisions] Passage 1")
     assert "[Reading notes]" in msg.content
-    assert msg.artifact["results"][0]["container"] == "mv-decisions"
-
-
-def test_search_by_memory_name(fake: FakeMembase) -> None:
-    call(MembaseSearchTool(client=fake.client()), {"query": "q", "container": "reading NOTES"})
-    assert fake.paths() == ["/v1/containers", "/v1/search"]
-    assert fake.requests[-1]["body"]["container"] == "mv-reading"
-
-
-def test_search_unknown_memory_lists_choices(fake: FakeMembase) -> None:
-    msg = call(MembaseSearchTool(client=fake.client()), {"query": "q", "container": "Diary"})
-    assert "No single Memory called 'Diary'" in msg.content
-    assert "'Project decisions', 'Reading notes'" in msg.content
-    assert "/v1/search" not in fake.paths()
+    assert msg.artifact["items"][0]["memory_name"] == "Project decisions"
+    assert fake.requests[-1]["body"] == {"q": "ledger", "mode": "full", "limit": 2}
 
 
 def test_search_reports_unavailable_memories(fake: FakeMembase) -> None:
-    fake.container_errors = {"mv-decisions": "no model", "mv-reading": "dormant"}
+    fake.memory_errors = {"Project decisions", "Reading notes"}
     msg = call(MembaseSearchTool(client=fake.client()), {"query": "q"})
     assert msg.content.startswith("No passages came back.")
-    assert "Project decisions: no model" in msg.content
+    assert "could not answer" in msg.content and "Project decisions; Reading notes" in msg.content
+
+
+def test_search_names_truncated_memories() -> None:
+    from langchain_membase._common import format_search
+
+    text = format_search(
+        {
+            "items": [{"type": "memory", "content": "Postgres", "memory_name": "Work"}],
+            "partial": [{"memory_name": "Life", "reason": "truncated"}],
+        }
+    )
+    assert text.startswith("- [Work] Postgres") and "did not fit the limit: Life" in text
 
 
 def test_search_revoked_key_message(fake: FakeMembase) -> None:
@@ -67,44 +72,25 @@ def test_search_revoked_key_message(fake: FakeMembase) -> None:
     assert "narrowed or revoked" in msg.content and "do not retry" in msg.content
 
 
-def test_save_static_fact_goes_to_profile(fake: FakeMembase) -> None:
-    msg = call(
-        MembaseSaveTool(client=fake.client()), {"content": "I prefer dark mode.", "static": True}
-    )
-    assert msg.content == "Recorded in the user's profile."
-    assert fake.requests[-1]["body"] == {
-        "content": "I prefer dark mode.",
-        "static": True,
-        "title": "",
-    }
-
-
-def test_save_note_to_named_memory(fake: FakeMembase) -> None:
-    msg = call(
-        MembaseSaveTool(client=fake.client()),
-        {"content": "We settled on Postgres.", "container": "Project decisions"},
-    )
+def test_save_lands_in_the_write_target(fake: FakeMembase) -> None:
+    msg = call(MembaseSaveTool(client=fake.client()), {"content": "We settled on Postgres."})
     assert msg.content.startswith("Saved to Project decisions.")
-    assert fake.requests[-1]["body"]["container"] == "mv-decisions"
+    assert fake.paths() == ["/v1/memories"]
+    assert fake.requests[-1]["body"] == {"content": "We settled on Postgres.", "title": ""}
     assert "confirm" not in fake.requests[-1]["params"]
 
 
-def test_save_default_container(fake: FakeMembase) -> None:
-    call(MembaseSaveTool(client=fake.client(), container="mv-reading"), {"content": "x"})
-    assert fake.paths() == ["/v1/memories"]
-    assert fake.requests[-1]["body"]["container"] == "mv-reading"
-
-
-def test_save_without_container_asks_which(fake: FakeMembase) -> None:
+def test_save_without_a_write_target_says_so(fake: FakeMembase) -> None:
+    fake.write_target = None
     msg = call(MembaseSaveTool(client=fake.client()), {"content": "x"})
-    assert "call again with container set to one of: 'Project decisions', 'Reading notes'" in (
-        msg.content
-    )
+    assert msg.status == "error"
+    assert "several Memories and has no write target, so nothing was saved" in msg.content
+    assert "Connect › Developer keys" in msg.content
 
 
 def test_save_with_a_read_key_is_refused_clearly(fake: FakeMembase) -> None:
     fake.read_only_keys.add("mbk_alice")
-    msg = call(MembaseSaveTool(client=fake.client()), {"content": "x", "static": True})
+    msg = call(MembaseSaveTool(client=fake.client()), {"content": "x"})
     assert msg.status == "error" and "narrowed or revoked" in msg.content
 
 
@@ -126,7 +112,7 @@ def test_tools_route_each_user_to_their_key(fake: FakeMembase) -> None:
     tools = membase_tools(client_for=lambda uid: fake.client(f"mbk_{uid}"))
     for uid in ("alice", "bob"):
         call(tools[0], {"query": "q"}, {"configurable": {"user_id": uid}})
-        call(tools[1], {"content": "x", "static": True}, {"configurable": {"user_id": uid}})
+        call(tools[1], {"content": "x"}, {"configurable": {"user_id": uid}})
     assert [r["key"] for r in fake.requests] == ["mbk_alice"] * 2 + ["mbk_bob"] * 2
 
 

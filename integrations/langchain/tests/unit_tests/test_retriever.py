@@ -11,20 +11,20 @@ from langchain_membase import MembaseRetriever, MembaseUnavailableError, Missing
 from .conftest import FakeMembase
 
 
-def test_invoke_returns_documents_citing_their_container(fake: FakeMembase) -> None:
+def test_invoke_returns_documents_citing_their_memory(fake: FakeMembase) -> None:
     docs = MembaseRetriever(client=fake.client(), k=3).invoke("the ledger")
     assert len(docs) == 3
-    assert {d.metadata["container_name"] for d in docs} == {"Project decisions", "Reading notes"}
-    assert docs[0].metadata["container"] == "mv-decisions"
-    assert "content" not in docs[0].metadata
-    assert fake.requests[-1]["body"] == {"q": "the ledger", "limit": 3}
+    assert {d.metadata["memory_name"] for d in docs} == {"Project decisions", "Reading notes"}
+    assert docs[0].metadata["id"] == "mem_0" and docs[0].metadata["type"] == "memory"
+    assert "content" not in docs[0].metadata and "container" not in docs[0].metadata
+    assert fake.requests[-1]["body"] == {"q": "the ledger", "mode": "full", "limit": 3}
 
 
-def test_container_and_k_at_call_time(fake: FakeMembase) -> None:
+def test_k_at_call_time(fake: FakeMembase) -> None:
     retriever = MembaseRetriever(client=fake.client())
-    docs = retriever.invoke("the ledger", k=2, container="mv-reading")
+    docs = retriever.invoke("the ledger", k=2)
     assert len(docs) == 2
-    assert fake.requests[-1]["body"] == {"q": "the ledger", "container": "mv-reading", "limit": 2}
+    assert fake.requests[-1]["body"] == {"q": "the ledger", "mode": "full", "limit": 2}
 
 
 def test_each_user_is_served_by_their_own_key(fake: FakeMembase) -> None:
@@ -70,17 +70,17 @@ def test_revoked_key_is_a_clear_403(fake: FakeMembase) -> None:
 
 
 def test_unavailable_memories_are_not_no_memory(fake: FakeMembase) -> None:
-    fake.container_errors = {"mv-decisions": "no model", "mv-reading": "dormant"}
-    with pytest.raises(MembaseUnavailableError, match="Project decisions: no model"):
+    fake.memory_errors = {"Project decisions", "Reading notes"}
+    with pytest.raises(MembaseUnavailableError, match="Project decisions; Reading notes"):
         MembaseRetriever(client=fake.client()).invoke("q")
 
 
 def test_partial_answer_is_returned_and_logged(fake: FakeMembase, caplog) -> None:
-    fake.container_errors = {"mv-reading": "dormant"}
+    fake.memory_errors = {"Reading notes"}
     with caplog.at_level(logging.WARNING, logger="langchain_membase"):
         docs = MembaseRetriever(client=fake.client(), k=2).invoke("q")
-    assert len(docs) == 2 and all(d.metadata["container_name"] == "Project decisions" for d in docs)
-    assert "Reading notes: dormant" in caplog.text
+    assert len(docs) == 2 and all(d.metadata["memory_name"] == "Project decisions" for d in docs)
+    assert "could not answer: Reading notes" in caplog.text
 
 
 def test_empty_answer_is_empty(fake: FakeMembase) -> None:

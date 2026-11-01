@@ -36,8 +36,8 @@ describe.skipIf(!enabled)("OpenClaw loads the plugin (real CLI)", () => {
     server = http.createServer((req, res) => {
       requests.push(`${req.method} ${req.url} ${req.headers.authorization ?? ""}`);
       res.setHeader("content-type", "application/json");
-      if (req.url?.startsWith("/v1/containers")) {
-        res.end(JSON.stringify({ containers: [{ id: "mv-dec", name: "Project decisions" }] }));
+      if (req.url?.startsWith("/v1/capabilities")) {
+        res.end(JSON.stringify({ principal: "apikey", surfaces: [], tools: ["search_memories"], actions: ["search"] }));
         return;
       }
       res.statusCode = 404;
@@ -112,6 +112,6 @@ describe.skipIf(!enabled)("OpenClaw loads the plugin (real CLI)", () => {
     const stdout = await openclaw("memory", "status", "--json");
     const status = JSON.parse(stdout.slice(stdout.indexOf("[")));
     expect(status[0]).toMatchObject({ provider: "membase", health: { status: "ready" } });
-    expect(requests).toContain("GET /v1/containers Bearer mbk_loader_test");
+    expect(requests).toContain("GET /v1/capabilities Bearer mbk_loader_test");
   }, 300_000);
 });

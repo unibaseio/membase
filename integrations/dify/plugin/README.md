@@ -5,8 +5,8 @@ The plugin adds three tools:
 
 | Tool | What it does |
 |---|---|
-| **Search memory** | Finds passages in the memory that answer a question, most relevant first. Each passage names the container (a Membase *Memory*) it came from. |
-| **Save memory** | Saves one fact, in the user's words, to a container, or to the user's profile as a standing fact. Only when the user asks for it. |
+| **Search memory** | Finds passages in every Memory the key reaches that answer a question, most relevant first. Each passage names the Memory it came from. |
+| **Save memory** | Saves one fact, in the user's words, to the key's Memory. Only when the user asks for it. |
 | **Get user profile** | Reads the standing facts about the user and the facts that changed most recently. |
 
 There is no delete or forget tool. Deleting memory is done by the account owner in the
@@ -19,7 +19,9 @@ Source repository: https://github.com/unibaseio/membase/tree/main/integrations/d
 1. **Create an API key.** In the Membase app (https://app.membase.com) open
    **Connect › Developer keys** and create a key. Choose **Read & write** if the app should
    save memories, **Read** if it should only search. Choose which Memories the key may reach,
-   and tick the profile if the app should read it.
+   and tick the profile if the app should read it. Saves go to the key's **write target**: the
+   one Memory it reaches. A key that reaches several Memories can search them all but cannot
+   save, so give a key that should save exactly one Memory.
 2. **Install the plugin** from the Dify Marketplace (**Plugins › Marketplace**, search for
    *Membase*).
 3. **Authorize it.** Open **Plugins › Membase › Authorize** (or **Tools › Membase**) and enter:
@@ -29,8 +31,8 @@ Source repository: https://github.com/unibaseio/membase/tree/main/integrations/d
    | Membase API key | yes | the key from step 1 (`mbk_…`) |
    | Base URL | no | leave empty for the Membase cloud (`https://api.app.membase.com`) |
 
-   Saving checks the key against the Membase API by listing the containers it reaches. A key
-   that is mistyped, expired or revoked is rejected with a `403` message at this step.
+   Saving checks the key against the Membase API by reading what it may do. A key that is
+   mistyped, expired or revoked is rejected with a `403` message at this step.
 
 ## Usage
 
@@ -38,7 +40,7 @@ Source repository: https://github.com/unibaseio/membase/tree/main/integrations/d
 can write, *Save memory* to the agent's tools. The tool descriptions tell the model when to use
 each: get the profile once near the start, search before answering anything that depends on what
 the user said before, and save only when the user asks to remember something. A useful line in
-the instructions: *"Cite the container name when you use a memory."*
+the instructions: *"Cite the Memory name when you use a memory."*
 
 **In a workflow or chatflow.** A typical memory loop:
 
@@ -48,18 +50,16 @@ the instructions: *"Cite the container name when you use a memory."*
 
 Tool inputs:
 
-- *Search memory*: `query` (required), `container` (optional; a container name or id, empty
-  searches every container the key reaches), `limit` (optional, 1-50 passages in all).
-- *Save memory*: `content` (required), `container` (needed when the key reaches more than one
-  container; if it is missing the error lists the names), `static` (true saves a standing fact
-  to the user's profile instead).
+- *Search memory*: `query` (required), `limit` (optional, 1-50 passages in all). It searches
+  every Memory the key reaches.
+- *Save memory*: `content` (required). It goes to the key's write target.
 - *Get user profile*: `query` (optional topic; adds passages relevant to it).
 
 Each tool returns a readable `text` output and a `json` output with the full answer, including
-`container_name` on every passage.
+`memory_name` on every passage.
 
-A saved note is accepted at once (`status: queued`) and Membase learns it in the background;
-search finds it after that. A profile fact (`static`) is recorded immediately.
+A saved note is accepted at once with its id (`doc_…`) and learning status (usually
+`processing` or `pending`), and Membase learns it in the background; search finds it after that.
 
 ## One key is one person's memory
 
@@ -90,15 +90,16 @@ debug preview has no such header. Never put one user's key in front of another u
 - The first search after a quiet spell can take up to a minute while the account's memory
   wakes; later calls are faster. Each request waits up to 90 seconds and is retried once.
 - The account needs a working model under **AI Setup** in the Membase app. Without one, searches
-  report the container as unavailable, and saved notes wait unread.
+  report the Memory as unavailable, and saved notes wait unread.
 
 ## Errors
 
 | Message | Meaning |
 |---|---|
-| `Membase refused this request (403 ...)` | The key is wrong, revoked or narrowed, is a Read key used to save, or the container is outside its reach. Do not retry with that key; check it under Connect › Developer keys. |
+| `Membase refused this request (403 ...)` | The key is wrong, revoked or narrowed, or is a Read key used to save. Do not retry with that key; check it under Connect › Developer keys. |
+| `... has no write target, so nothing was saved` | The key reaches several Memories, so a save has nowhere to go. Give the key a single Memory under Connect › Developer keys. |
 | `Membase refused to read the profile (403 ...)` | The key's owner did not grant the profile to this key. |
-| `Could not search container '...'` | That container could not answer this time (for example no working model). This is not the same as "no memory". |
+| `Could not search the Memory '...'` | That Memory could not answer this time (for example no working model). This is not the same as "no memory". |
 | `Membase did not answer in time` | A cold start took too long; try again. |
 | `422 capability_unavailable` / `dormant` | The account has no working model, or its free turns are spent. |
 

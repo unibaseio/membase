@@ -129,15 +129,11 @@ export function scriptedFetch(route: Route) {
 }
 
 export const SEARCH_OK = {
-  query: "q",
-  results: [
-    { content: "We settled on Postgres for the ledger.", container: "mv-dec", container_name: "Project decisions", score: 0.82 },
-    { content: "Acme wants SSO before the pilot.", container: "mv-crm", container_name: "Customers", score: 0.4 },
+  items: [
+    { type: "memory", id: "mem_ZGVjOjE", content: "We settled on Postgres for the ledger.", memory_name: "Project decisions", score: 0.82 },
+    { type: "document", content: "Acme wants SSO before the pilot.", memory_name: "Customers", score: 0.4 },
   ],
-  containers: [
-    { id: "mv-dec", name: "Project decisions" },
-    { id: "mv-crm", name: "Customers" },
-  ],
+  partial: [],
 };
 
 export const FORBIDDEN = {

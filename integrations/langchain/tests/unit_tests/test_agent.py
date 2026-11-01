@@ -136,7 +136,7 @@ def test_middleware_without_user_id_skips_recall(fake: FakeMembase, caplog) -> N
 
 def test_capture_turns_is_opt_in(fake: FakeMembase) -> None:
     model = ScriptedModel(replies=[AIMessage(content="Noted, dark mode.")])
-    mw = MembaseRecallMiddleware(fake.client(), container="mv-reading", capture_turns=True)
+    mw = MembaseRecallMiddleware(fake.client(), capture_turns=True)
     create_agent(model, middleware=[mw]).invoke(
         {"messages": [{"role": "user", "content": "I like dark mode"}]}
     )
@@ -147,12 +147,12 @@ def test_capture_turns_is_opt_in(fake: FakeMembase) -> None:
     assert len(saved) == 1
     assert saved[0]["body"]["content"] == "I like dark mode"  # the user's words, no AI reply
     assert "Noted" not in saved[0]["body"]["content"]
-    assert saved[0]["body"]["container"] == "mv-reading"
+    assert saved[0]["body"] == {"content": "I like dark mode", "title": ""}
 
 
 def test_capture_saves_only_the_users_messages_once_per_turn(fake: FakeMembase) -> None:
     model = ScriptedModel(replies=[AIMessage(content="Sure.")])
-    mw = MembaseRecallMiddleware(fake.client(), container="mv-reading", capture_turns=True)
+    mw = MembaseRecallMiddleware(fake.client(), capture_turns=True)
     agent = create_agent(model, middleware=[mw])
     history = [
         {"role": "user", "content": "old question", "id": "h0"},
@@ -196,9 +196,7 @@ async def test_async_middleware_fails_open(fake: FakeMembase) -> None:
 
 def test_capture_routes_to_the_users_key(fake: FakeMembase) -> None:
     model = ScriptedModel(replies=[AIMessage(content="Noted.")])
-    mw = MembaseRecallMiddleware(
-        client_for=lambda u: fake.client(f"mbk_{u}"), container="mv-reading", capture_turns=True
-    )
+    mw = MembaseRecallMiddleware(client_for=lambda u: fake.client(f"mbk_{u}"), capture_turns=True)
     create_agent(model, middleware=[mw]).invoke(
         {"messages": [{"role": "user", "content": "remember: tea, not coffee"}]},
         config={"configurable": {"user_id": "frank"}},

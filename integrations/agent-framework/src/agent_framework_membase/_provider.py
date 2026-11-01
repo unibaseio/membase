@@ -9,10 +9,11 @@ from typing import TYPE_CHECKING, Any
 
 from agent_framework import AgentSession, ContextProvider, SessionContext
 from membase import Membase
-from membase.errors import BadRequestError, PermissionDeniedError
+from membase.errors import PermissionDeniedError, WriteTargetRequiredError
 
 from ._common import (
     DEFAULT_SOURCE_ID,
+    NO_WRITE_TARGET,
     REVOKED,
     ClientFor,
     Clients,
@@ -59,12 +60,12 @@ class MembaseContextProvider(ContextProvider):
     ``recall_timeout`` seconds (8 by default: the first search after a quiet spell can take
     up to a minute while the memory wakes). On a timeout or any error the run continues
     without memory and the reason is logged. Passages are added to the run's instructions,
-    each citing the Memory (container) it came from; a Memory that could not answer is named
-    too, so the model does not read silence as "nothing stored".
+    each citing the Memory it came from; a Memory that could not answer is named too, so the
+    model does not read silence as "nothing stored".
 
     ``after_run`` saves nothing unless ``capture=True``. With capture on, the user's own
-    messages from the turn (not the agent's replies) are added as one note; prefer the
-    deliberate ``membase_save`` tool from :func:`membase_tools`.
+    messages from the turn (not the agent's replies) are added as one note in the key's write
+    target; prefer the deliberate ``membase_save`` tool from :func:`membase_tools`.
 
     One client serves every session unless ``client_for`` is given: then each session must
     name its person with :func:`bind_user` and is served by ``client_for(user_id)``, that
@@ -84,12 +85,10 @@ class MembaseContextProvider(ContextProvider):
         local: str | os.PathLike[str] | bool | None = None,
         client_for: ClientFor | None = None,
         source_id: str = DEFAULT_SOURCE_ID,
-        container: str | None = None,
         limit: int | None = DEFAULT_LIMIT,
         recall_timeout: float = DEFAULT_RECALL_TIMEOUT,
         context_prompt: str = DEFAULT_CONTEXT_PROMPT,
         capture: bool = False,
-        capture_container: str | None = None,
         capture_title: str = "Agent Framework conversation",
     ) -> None:
         """Create the provider.
@@ -103,14 +102,13 @@ class MembaseContextProvider(ContextProvider):
             client_for: ``user_id -> Membase`` for an app serving several people; the user id
                 comes from :func:`bind_user` on the session. Excludes the arguments above.
             source_id: The provider id; also the ``session.state`` key of the user binding.
-            container: Search only this container id; default every Memory the key reaches.
-            limit: Passages per recall (``None`` lets the server cover every Memory in reach).
+            limit: Passages per recall, across every Memory the key reaches (``None``: the
+                server's default).
             recall_timeout: Seconds the automatic recall may take before the run goes on
                 without it.
             context_prompt: Heading placed above the recalled passages.
-            capture: Save the user's messages after each turn. Off by default.
-            capture_container: Container id that receives captured turns; required when the
-                key reaches more than one Memory.
+            capture: Save the user's messages after each turn, into the key's write target.
+                Off by default.
             capture_title: Title of captured notes.
         """
         super().__init__(source_id)
@@ -122,12 +120,10 @@ class MembaseContextProvider(ContextProvider):
             client_for=client_for,
             source_id=source_id,
         )
-        self.container = container
         self.limit = limit
         self.recall_timeout = recall_timeout
         self.context_prompt = context_prompt
         self.capture = capture
-        self.capture_container = capture_container
         self.capture_title = capture_title
         # A 403 means the owner narrowed or revoked the key: stop calling it automatically.
         self._refused_recall: weakref.WeakSet[Membase] = weakref.WeakSet()
@@ -176,7 +172,6 @@ class MembaseContextProvider(ContextProvider):
             answer = await in_thread(
                 client.search,
                 texts[-1],
-                container=self.container,
                 limit=self.limit,
                 timeout=self.recall_timeout,
             )
@@ -205,8 +200,8 @@ class MembaseContextProvider(ContextProvider):
             parts.append("<membase_memory>\n" + "\n".join(passages) + "\n</membase_memory>")
         if unanswered:
             parts.append(
-                "These Memories could not answer this time, so a missing passage from them is "
-                "not evidence that nothing is stored:\n" + "\n".join(unanswered)
+                "These Memories did not fully answer this time, so a missing passage from them "
+                "is not evidence that nothing is stored:\n" + "\n".join(unanswered)
             )
         context.extend_instructions(self.source_id, "\n\n".join(parts))
 
@@ -231,7 +226,6 @@ class MembaseContextProvider(ContextProvider):
             await in_thread(
                 client.memories.add,
                 "\n\n".join(texts),
-                container=self.capture_container,
                 title=self.capture_title,
                 timeout=self.recall_timeout,
             )
@@ -247,13 +241,9 @@ class MembaseContextProvider(ContextProvider):
                 REVOKED,
                 exc.message,
             )
-        except BadRequestError as exc:
-            hint = (
-                ""
-                if self.capture_container
-                else " (set capture_container= when the key reaches several Memories)"
-            )
-            logger.warning("Membase: capture refused: %s%s", exc.message, hint)
+        except WriteTargetRequiredError:
+            self._refused_capture.add(client)
+            logger.error("Membase: capture stopped: %s.", NO_WRITE_TARGET)
         except Exception as exc:  # noqa: BLE001 - a failed capture must never break a run
             logger.warning("Membase: capture failed: %s", describe_error(exc))
 

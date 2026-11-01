@@ -16,7 +16,7 @@ def _instructions(chat: ScriptedChatClient, i: int = 0) -> str:
     return str(chat.seen[i]["options"].get("instructions") or "")
 
 
-async def test_recall_injects_passages_citing_the_container(mem):
+async def test_recall_injects_passages_citing_the_memory(mem):
     chat = ScriptedChatClient([say("Postgres.")])
     agent = Agent(
         client=chat, instructions="Be brief.", context_providers=[MembaseContextProvider(mem.client())]
@@ -26,7 +26,7 @@ async def test_recall_injects_passages_citing_the_container(mem):
 
     assert result.text == "Postgres."
     (search,) = mem.calls("/v1/search")
-    assert search["json"] == {"q": "what did we decide about the ledger?", "limit": 8}
+    assert search["json"] == {"q": "what did we decide about the ledger?", "mode": "full", "limit": 8}
     text = _instructions(chat)
     assert text.startswith("Be brief.")
     assert "## Membase memory" in text
@@ -38,14 +38,12 @@ async def test_recall_injects_passages_citing_the_container(mem):
 
 async def test_recall_searches_only_the_latest_user_message(mem):
     chat = ScriptedChatClient()
-    agent = Agent(
-        client=chat, context_providers=[MembaseContextProvider(mem.client(), container="mv-decisions")]
-    )
+    agent = Agent(client=chat, context_providers=[MembaseContextProvider(mem.client())])
     session = agent.create_session()
     await agent.run("first question", session=session)
     await agent.run("second question", session=session)
     assert [c["json"]["q"] for c in mem.calls("/v1/search")] == ["first question", "second question"]
-    assert all(c["json"]["container"] == "mv-decisions" for c in mem.calls("/v1/search"))
+    assert all("container" not in c["json"] for c in mem.calls("/v1/search"))
 
 
 async def test_nothing_found_injects_nothing(mem):
@@ -60,15 +58,15 @@ async def test_nothing_found_injects_nothing(mem):
 
 async def test_a_memory_that_could_not_answer_is_reported_not_silent(mem, caplog):
     mem.results = []
-    mem.container_errors = [{"id": "mv-travel", "name": "Travel", "error": "no model configured"}]
+    mem.partial = [{"memory_name": "Travel", "reason": "error"}]
     chat = ScriptedChatClient()
     agent = Agent(client=chat, context_providers=[MembaseContextProvider(mem.client())])
     with caplog.at_level(logging.WARNING, logger="agent_framework_membase"):
         await agent.run("where am I flying next?")
     text = _instructions(chat)
-    assert '"Travel" could not answer: no model configured' in text
+    assert '"Travel" could not answer' in text
     assert "not evidence that nothing is stored" in text
-    assert "no model configured" in caplog.text
+    assert '"Travel" could not answer' in caplog.text
 
 
 async def test_cold_start_fails_open_within_the_budget(mem, caplog):
@@ -119,22 +117,20 @@ async def test_capture_saves_the_users_words_once_per_turn(mem):
         return "done"
 
     chat = ScriptedChatClient([call("noop", {}), say("Noted.")])
-    provider = MembaseContextProvider(mem.client(), capture=True, capture_container="mv-travel")
+    provider = MembaseContextProvider(mem.client(), capture=True)
     agent = Agent(client=chat, tools=[noop], context_providers=[provider])
     await agent.run("I always take the window seat")
     (saved,) = mem.calls("/v1/memories")
     assert saved["json"] == {
         "content": "I always take the window seat",
-        "static": False,
         "title": "Agent Framework conversation",
-        "container": "mv-travel",
     }
     assert "confirm" not in saved["params"]
 
 
 async def test_capture_with_a_read_key_stops_after_the_refusal(mem, caplog):
     mem.status["/v1/memories"] = 403
-    provider = MembaseContextProvider(mem.client(), capture=True, capture_container="mv-travel")
+    provider = MembaseContextProvider(mem.client(), capture=True)
     agent = Agent(client=ScriptedChatClient(), context_providers=[provider])
     with caplog.at_level(logging.ERROR, logger="agent_framework_membase"):
         await agent.run("a")
@@ -211,9 +207,12 @@ def test_api_host_defaults_to_membase_com_whatever_the_sdk_defaults_to(monkeypat
     p.close()
 
 
-async def test_capture_without_a_container_explains_how_to_fix_it(mem, caplog):
+async def test_capture_without_a_write_target_explains_how_to_fix_it(mem, caplog):
+    mem.write_target = None
     provider = MembaseContextProvider(mem.client(), capture=True)
     agent = Agent(client=ScriptedChatClient(), context_providers=[provider])
     with caplog.at_level(logging.WARNING, logger="agent_framework_membase"):
         await agent.run("I always take the window seat")
-    assert "set capture_container=" in caplog.text
+        await agent.run("and the aisle on short flights")
+    assert len(mem.calls("/v1/memories")) == 1  # refused once, then not retried
+    assert "no write target" in caplog.text and "Connect › Developer keys" in caplog.text

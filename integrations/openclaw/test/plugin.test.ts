@@ -147,17 +147,18 @@ describe("membase_search", () => {
     expect(calls[0].url.origin).toBe(BASE);
     expect(calls[0].method).toBe("POST");
     expect(calls[0].headers.Authorization).toBe(`Bearer ${KEY}`);
-    expect(calls[0].body).toEqual({ q: "ledger database", limit: 3 });
+    expect(calls[0].body).toEqual({ q: "ledger database", limit: 3, mode: "full" });
+    expect(JSON.stringify(calls[0].body)).not.toContain("container");
     expect(textOf(out as any)).toContain("- [Project decisions] We settled on Postgres for the ledger.");
     expect(textOf(out as any)).toContain("[Customers]");
   });
 
   it("reports a Memory that could not answer instead of 'no memory'", async () => {
-    const reply = { query: "q", results: [], containers: [{ id: "mv-dec", name: "Project decisions", error: "no model" }] };
+    const reply = { items: [], partial: [{ memory_name: "Project decisions", reason: "error" }] };
     const { rec } = setup({}, () => ({ json: reply }));
     const out = await tool(rec, "membase_search", ownerCtx())!.execute("c", { query: "x" });
     const text = textOf(out as any);
-    expect(text).toContain('Memory "Project decisions" could not answer: no model');
+    expect(text).toContain('Memory "Project decisions" could not answer');
     expect(text).not.toContain("No matching memories");
   });
 
@@ -200,34 +201,36 @@ describe("membase_search", () => {
 });
 
 describe("membase_save", () => {
-  it("saves the user's words into the configured Memory", async () => {
-    const { rec, calls } = setup({ container: "mv-dec" }, (c) =>
+  it("saves the user's words into the key's write target", async () => {
+    const { rec, calls } = setup({}, (c) =>
       c.path === "/v1/memories"
-        ? { status: 202, json: { memory_id: "m1", document_id: "srcitem_1", status: "queued", learning_run: null } }
+        ? {
+            status: 202,
+            json: { id: "doc_bm90ZQ", kind: "note", status: "processing", learning: [{ memory_name: "Project decisions", status: "processing" }] },
+          }
         : undefined,
     );
     const out = await tool(rec, "membase_save", ownerCtx())!.execute("c", { content: "  We chose Postgres.  " });
     expect(calls[0]).toMatchObject({ method: "POST", path: "/v1/memories" });
-    expect(calls[0].body).toEqual({ content: "We chose Postgres.", container: "mv-dec", static: false, title: "" });
-    expect(textOf(out as any)).toMatch(/Saved to Membase.*srcitem_1.*queued/);
+    expect(calls[0].body).toEqual({ content: "We chose Postgres.", title: "" });
+    expect(textOf(out as any)).toMatch(/Saved to Membase in Project decisions \(note doc_bm90ZQ\); learning processing/);
   });
 
-  it("records a standing fact in the profile with static", async () => {
-    const { rec, calls } = setup({}, () => ({ status: 202, json: { static: true, status: "recorded", run_id: "r" } }));
-    const out = await tool(rec, "membase_save", ownerCtx())!.execute("c", { content: "I prefer dark mode.", static: true });
-    expect(calls[0].body).toMatchObject({ static: true });
-    expect(calls[0].body.container).toBeUndefined();
-    expect(textOf(out as any)).toContain("profile");
+  it("the save tool offers no container or static parameter", async () => {
+    const { rec } = setup();
+    const props = Object.keys((tool(rec, "membase_save", ownerCtx())!.parameters as any).properties);
+    expect(props.sort()).toEqual(["content", "title"]);
+    const searchProps = Object.keys((tool(rec, "membase_search", ownerCtx())!.parameters as any).properties);
+    expect(searchProps).not.toContain("container");
   });
 
-  it("an ambiguous container lists the Memories in reach", async () => {
-    const { rec } = setup({}, (c) => {
-      if (c.path === "/v1/memories") return { status: 400, json: { error: { code: "validation", message: "container is required" } } };
-      if (c.path === "/v1/containers") return { json: { containers: [{ id: "mv-dec", name: "Project decisions" }, { id: "mv-crm", name: "Customers" }] } };
-      return undefined;
-    });
+  it("a key with no write target says nothing was saved and how to fix it", async () => {
+    const { rec } = setup({}, () => ({
+      status: 422,
+      json: { error: { code: "write_target_required", message: "this credential reaches 2 Memories", details: { memories_in_reach: 2 } } },
+    }));
     await expect(tool(rec, "membase_save", ownerCtx())!.execute("c", { content: "x" })).rejects.toThrow(
-      /Memories in reach: Project decisions \(mv-dec\), Customers \(mv-crm\)/,
+      /several Memories and has no write target.*single Memory under Connect > Developer keys/,
     );
   });
 
@@ -237,7 +240,10 @@ describe("membase_save", () => {
   });
 
   it("a pre-compaction flush does not save the same note twice", async () => {
-    const { rec, calls } = setup({ autoCapture: true }, () => ({ status: 202, json: { status: "queued" } }));
+    const { rec, calls } = setup({ autoCapture: true }, () => ({
+      status: 202,
+      json: { id: "doc_eA", kind: "note", status: "pending", learning: [] },
+    }));
     const ctx = ownerCtx({ memoryFlush: { flushId: "flush-1" } });
     await tool(rec, "membase_save", ctx)!.execute("a", { content: "We chose Postgres." });
     const again = await tool(rec, "membase_save", ctx)!.execute("b", { content: "We chose Postgres." });

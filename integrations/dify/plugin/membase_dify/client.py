@@ -26,6 +26,7 @@ from membase.errors import (
     PermissionDeniedError,
     RateLimitError,
     UnprocessableEntityError,
+    WriteTargetRequiredError,
 )
 
 # The plugin's own default: it does not depend on which SDK release is installed.
@@ -102,8 +103,8 @@ def explain(err: MembaseError) -> str:
     if isinstance(err, PermissionDeniedError):
         return (
             f"Membase refused this request (403: {detail}). The API key is wrong, or its owner "
-            "revoked or narrowed it (a Read key cannot save; a container may be outside its "
-            f"reach). Do not retry with this key; check it under {KEYS_PAGE}."
+            "revoked or narrowed it (a Read key cannot save). "
+            f"Do not retry with this key; check it under {KEYS_PAGE}."
         )
     if isinstance(err, AuthenticationError):
         return f"Membase received no API key (401). Add one under {KEYS_PAGE}."
@@ -111,6 +112,11 @@ def explain(err: MembaseError) -> str:
         return f"Membase rejected the request (400: {detail})."
     if isinstance(err, NotFoundError):
         return f"Membase could not find that (404: {detail})."
+    if isinstance(err, WriteTargetRequiredError):
+        return (
+            "This Membase key reaches several Memories and has no write target, so nothing was "
+            f"saved; give the key a single Memory under {KEYS_PAGE}."
+        )
     if isinstance(err, UnprocessableEntityError):
         return (
             f"The Membase account cannot run a memory turn right now (422 {err.code}: {detail}). "
@@ -127,32 +133,3 @@ def explain(err: MembaseError) -> str:
         return f"Could not reach Membase: {detail}"
     status = f"{err.status}: " if err.status else ""
     return f"Membase error ({status}{detail})."
-
-
-def container_names(containers: list[dict]) -> str:
-    names = [f"{c.get('name') or '(unnamed)'} ({c.get('id')})" for c in containers]
-    return ", ".join(names) if names else "none"
-
-
-def resolve_container(client: Membase, wanted: Any) -> dict | None:
-    """The container a tool call named, by id or by name; None when it named none."""
-    value = str(wanted or "").strip()
-    if not value:
-        return None
-    containers = client.containers.list().get("containers") or []
-    for c in containers:
-        if c.get("id") == value:
-            return c
-    lowered = value.lower()
-    matches = [c for c in containers if str(c.get("name") or "").strip().lower() == lowered]
-    if len(matches) == 1:
-        return matches[0]
-    if matches:
-        raise MembaseToolError(
-            f"More than one Membase container is named '{value}': {container_names(matches)}. "
-            "Pass the id instead."
-        )
-    raise MembaseToolError(
-        f"No Membase container named '{value}' is in this key's reach. "
-        f"Containers available: {container_names(containers)}."
-    )

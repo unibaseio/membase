@@ -1,4 +1,4 @@
-version: 0.0.1
+version: 0.1.0
 type: plugin
 author: unibase
 name: membase
@@ -24,7 +24,7 @@ network:
     - "*.membase.ai"
     - "*.membase.io"
 meta:
-  version: 0.0.1
+  version: 0.1.0
   arch:
     - amd64
     - arm64

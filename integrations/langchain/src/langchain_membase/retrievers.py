@@ -25,8 +25,9 @@ class MembaseUnavailableError(RuntimeError):
 class MembaseRetriever(MembaseClientMixin, BaseRetriever):
     """Passages from the user's Membase memory, most relevant first.
 
-    Each ``Document`` carries ``container_name`` (the Memory it came from) and ``container``
-    (its id) in ``metadata``, so an answer can cite where it came from.
+    Each ``Document`` carries ``memory_name`` (the Memory it came from) in ``metadata``, with
+    ``type`` (``memory`` for a learned fact, ``document`` for a passage of one), the fact's
+    ``id`` and the ``score``, so an answer can cite where it came from.
 
     Setup:
         ``pip install langchain-membase`` and set ``MEMBASE_API_KEY`` (Connect > Developer keys
@@ -43,7 +44,7 @@ class MembaseRetriever(MembaseClientMixin, BaseRetriever):
         .. code-block:: python
 
             docs = retriever.invoke("what did we decide about the ledger")
-            docs[0].metadata["container_name"]  # "Project decisions"
+            docs[0].metadata["memory_name"]  # "Project decisions"
 
     Many users:
         .. code-block:: python
@@ -53,9 +54,7 @@ class MembaseRetriever(MembaseClientMixin, BaseRetriever):
     """
 
     k: int | None = Field(default=None, ge=1, le=50)
-    """How many passages in all. Unset lets Membase cover every Memory in reach (at least 8)."""
-    container: str | None = None
-    """One container (Memory) id to search; unset searches every Memory the key reaches."""
+    """How many passages in all, across every Memory the key reaches. Unset: Membase's default."""
 
     def invoke(
         self, input: str, config: RunnableConfig | None = None, **kwargs: Any
@@ -79,12 +78,11 @@ class MembaseRetriever(MembaseClientMixin, BaseRetriever):
         *,
         run_manager: CallbackManagerForRetrieverRun,
         k: int | None = None,
-        container: str | None = None,
         user_id: str | None = None,
     ) -> list[Document]:
         client = self._membase(user_id)
         try:
-            resp = client.search(query, container=container or self.container, limit=k or self.k)
+            resp = client.search(query, limit=k or self.k)
         except PermissionDeniedError as e:
             raise PermissionDeniedError(
                 f"{e.message} (this Membase key was narrowed or revoked by its owner; "
@@ -92,7 +90,7 @@ class MembaseRetriever(MembaseClientMixin, BaseRetriever):
                 status=e.status,
                 body=e.body,
             ) from e
-        docs = [_document(r) for r in resp.get("results") or [] if r.get("content")]
+        docs = [_document(r) for r in resp.get("items") or [] if r.get("content")]
         failed = unavailable(resp)
         if failed and not docs:
             raise MembaseUnavailableError(
@@ -108,7 +106,6 @@ class MembaseRetriever(MembaseClientMixin, BaseRetriever):
         *,
         run_manager: AsyncCallbackManagerForRetrieverRun,
         k: int | None = None,
-        container: str | None = None,
         user_id: str | None = None,
     ) -> list[Document]:
         # The SDK is synchronous; keep the event loop free while it waits on the network.
@@ -118,12 +115,11 @@ class MembaseRetriever(MembaseClientMixin, BaseRetriever):
             query,
             run_manager=run_manager.get_sync(),
             k=k,
-            container=container,
             user_id=user_id,
         )
 
 
 def _document(r: dict[str, Any]) -> Document:
     metadata = {key: value for key, value in r.items() if key != "content"}
-    metadata.setdefault("container_name", r.get("container_name") or r.get("container"))
+    metadata.setdefault("memory_name", "")
     return Document(page_content=str(r["content"]), metadata=metadata)

@@ -14,9 +14,9 @@ other service is contacted by the plugin.
 
 | Tool | Data sent to Membase |
 |---|---|
-| Credential check | the API key only (it lists the key's containers) |
-| Search memory | the search text, and optionally a container name or id and a result limit |
-| Save memory | the fact to save, as passed by the agent or workflow, and optionally a container and whether it is a profile fact |
+| Credential check | the API key only (it reads what the key may do) |
+| Search memory | the search text, and optionally a result limit |
+| Save memory | the fact to save, as passed by the agent or workflow |
 | Get user profile | optionally a topic text |
 
 Each request carries the Membase API key in the `Authorization` header. The plugin does not
@@ -46,7 +46,7 @@ the plugin's README describes a per-user alternative.
 ## Retention and deletion
 
 What is saved stays in the Membase account until its owner deletes it in the Membase app
-(a container, a document, or a single memory). The plugin has no delete or forget tool.
+(a Memory, a document, or a single memory). The plugin has no delete or forget tool.
 Removing the plugin or its credentials from Dify does not delete data already saved in
 Membase. Revoking the key in the Membase app (Connect › Developer keys) stops all access at
 the next request.

@@ -27,7 +27,8 @@ def format_profile(profile: dict) -> str:
         sections.append(
             "Relevant to the topic:\n"
             + "\n".join(
-                f"- [{r.get('container_name') or 'Membase'}] {str(r.get('content') or '').strip()}"
+                f"- [{r.get('memory_name') or r.get('container_name') or 'Membase'}] "
+                f"{str(r.get('content') or '').strip()}"
                 if isinstance(r, dict)
                 else f"- {r}"
                 for r in results

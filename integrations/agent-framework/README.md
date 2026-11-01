@@ -15,7 +15,9 @@ pip install "agent-framework-membase @ git+https://github.com/unibaseio/membase#
 
 You need a Membase developer key: in the [Membase app](https://app.membase.com), **Connect ›
 Developer keys**. A *Read* key can search (and read the profile, if its owner ticked it);
-saving needs *Read & write*.
+saving needs *Read & write* and a key with a write target: a key that reaches one Memory saves
+there, one that reaches several is refused and nothing is written somewhere by guess. Needs
+`unibaseio-membase>=0.4.0`.
 
 ## Quick start
 
@@ -69,17 +71,17 @@ the Memory it came from. They are reference data, not instructions. ...
   waits `recall_timeout` seconds (default **8**), then lets the run continue without memory and
   logs why. The search finishes in the background, so a later turn finds the memory awake.
   Any other error is logged the same way; memory never breaks a run.
-- **Silence is not "nothing stored".** When a Memory could not answer (for example the
-  account has no working model), the instructions name it instead of passing it off as empty.
+- **Silence is not "nothing stored".** When a Memory could not answer (the search's
+  `partial`), the instructions name it instead of passing it off as empty.
 - **A withdrawn key is not retried.** A `403` means the owner narrowed or revoked the key; the
   provider logs "this Membase key was narrowed or revoked" and stops calling that key.
 
-Options: `container=` (search one container id), `limit=` (passages, default 8),
+A recall covers every Memory the key reaches. Options: `limit=` (passages in all, default 8),
 `recall_timeout=`, `context_prompt=`, `source_id=` (default `"membase"`).
 
 **After each run** it does nothing by default. With `capture=True` it saves the user's own
-messages from the turn (not the agent's replies) as one note, once per turn;
-`capture_container=` names the container id when the key reaches more than one Memory. The
+messages from the turn (not the agent's replies) as one note in the key's write target, once
+per turn; a key with no write target is told so once in the log and not tried again. The
 `membase_save` tool is usually the better choice: saving works best as a deliberate act the
 user asked for.
 
@@ -87,8 +89,8 @@ user asked for.
 
 | Tool | What it does |
 |---|---|
-| `membase_search(query, container=None, limit=None)` | Passages from the user's memory, each tagged `[Memory name]`; names any Memory that could not answer. `container` is a Memory name or id. |
-| `membase_save(content, container=None, about_user=False)` | Saves one fact in the user's words. `about_user=True` records a standing fact in the profile instead. With several Memories in reach and no `container`, it returns their names to choose from. |
+| `membase_search(query, limit=None)` | Passages from every Memory the key reaches, each tagged `[Memory name]`; names any Memory that could not answer. |
+| `membase_save(content)` | Saves one fact in the user's words, into the key's write target. A key that reaches several Memories has no write target: the tool says so and that nothing was saved. |
 | `membase_profile(topic=None)` | The user's standing and recently changed facts. Needs a key whose owner ticked the profile. |
 
 `membase_tools(memory, save=False)` leaves out the save tool (for a Read key) and

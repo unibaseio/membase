@@ -12,7 +12,7 @@ set -euo pipefail
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 CACHE="$HERE/.cache"
-PKG=$(realpath "${1:-$HERE/membase-0.0.1.difypkg}")
+PKG=$(realpath "${1:-$HERE/membase-0.1.0.difypkg}")
 PR_BODY=$(realpath "${2:-$HERE/pr-body.md}")
 TOOLKIT="$CACHE/dify-marketplace-toolkit"
 DAEMON="$CACHE/dify-plugin-linux-amd64"

@@ -12,11 +12,6 @@ import pytest
 from membase import Membase
 from strands.models import Model
 
-CONTAINERS = [
-    {"id": "mv-decisions", "name": "Project decisions"},
-    {"id": "mv-health", "name": "Health"},
-]
-
 
 class FakeMembase:
     """Answers the Membase REST calls the adapter makes and records every request."""
@@ -28,10 +23,16 @@ class FakeMembase:
         self.profile_status = 200
         self.memories_status = 202
         self.search_body: dict[str, Any] = {
-            "results": [
-                {"content": "We chose Postgres for the ledger.", "container_name": "Project decisions", "score": 0.9},
+            "items": [
+                {
+                    "type": "memory",
+                    "id": "mem_eA",
+                    "content": "We chose Postgres for the ledger.",
+                    "memory_name": "Project decisions",
+                    "score": 0.9,
+                },
             ],
-            "containers": [{"id": "mv-decisions", "name": "Project decisions"}],
+            "partial": [],
         }
 
     def handler(self, request: httpx.Request) -> httpx.Response:
@@ -47,14 +48,18 @@ class FakeMembase:
             if self.search_status != 200:
                 return _error(self.search_status)
             return httpx.Response(200, json=self.search_body)
-        if path == "/v1/containers":
-            return httpx.Response(200, json={"containers": CONTAINERS})
         if path == "/v1/memories":
             if self.memories_status != 202:
                 return _error(self.memories_status)
-            if body.get("static"):
-                return httpx.Response(202, json={"static": True, "status": "recorded", "content": body["content"]})
-            return httpx.Response(202, json={"memory_id": "m1", "document_id": "d1", "status": "queued"})
+            return httpx.Response(
+                202,
+                json={
+                    "id": "doc_bm90ZQ",
+                    "kind": "note",
+                    "status": "processing",
+                    "learning": [{"memory_name": "Project decisions", "status": "processing"}],
+                },
+            )
         if path == "/v1/profile":
             if self.profile_status != 200:
                 return _error(self.profile_status)
@@ -70,8 +75,8 @@ class FakeMembase:
 
 def _error(status: int) -> httpx.Response:
     messages = {
-        400: ("validation", "container is required when more than one is in reach"),
         403: ("unauthorized", "unauthorized"),
+        422: ("write_target_required", "this credential reaches 2 Memories and has no write target"),
     }
     code, message = messages.get(status, ("error", f"HTTP {status}"))
     return httpx.Response(status, json={"error": {"code": code, "message": message}})

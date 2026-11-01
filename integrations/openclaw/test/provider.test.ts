@@ -52,7 +52,7 @@ describe("memory slot provider runtime", () => {
     const { runtime, calls } = runtimeFor();
     const provider = await open(runtime, owner);
     const page = await provider.search({ query: "ledger", maxResults: 2 });
-    expect(calls[0].body).toEqual({ q: "ledger", limit: 2 });
+    expect(calls[0].body).toEqual({ q: "ledger", limit: 2, mode: "full" });
     expect(page.coverage).toBe("complete");
     expect(page.hits.map((h) => h.excerpt)).toEqual([
       "We settled on Postgres for the ledger.",
@@ -63,7 +63,7 @@ describe("memory slot provider runtime", () => {
 
     const got = await provider.get({ reference: page.hits[0].reference });
     expect(got).toMatchObject({ status: "ok", text: "We settled on Postgres for the ledger." });
-    expect(await provider.get({ reference: { providerId: "membase", id: "mv-dec:unknown" } })).toEqual({ status: "not_found" });
+    expect(await provider.get({ reference: { providerId: "membase", id: "unknown" } })).toEqual({ status: "not_found" });
     expect(await provider.get({ reference: { providerId: "other", id: page.hits[0].reference.id } })).toEqual({
       status: "not_found",
     });
@@ -76,11 +76,11 @@ describe("memory slot provider runtime", () => {
   });
 
   it("a Memory that could not answer marks the page partial", async () => {
-    const reply = { ...SEARCH_OK, containers: [{ id: "mv-crm", name: "Customers", error: "dormant" }] };
+    const reply = { ...SEARCH_OK, partial: [{ memory_name: "Customers", reason: "error" }] };
     const provider = await open(runtimeFor({}, () => ({ json: reply })).runtime, owner);
     const page = await provider.search({ query: "x" });
     expect(page.coverage).toBe("partial");
-    expect(page.warning).toContain('Memory "Customers" could not answer: dormant');
+    expect(page.warning).toContain('Memory "Customers" could not answer');
   });
 
   it("a slow (waking) memory answers partial with a warning within the budget", async () => {
@@ -123,7 +123,7 @@ describe("memory slot provider runtime", () => {
   });
 
   it("health works for every caller without revealing content", async () => {
-    const ok = runtimeFor({}, (c) => (c.path === "/v1/containers" ? { json: { containers: [{ id: "mv-dec", name: "Secret plans" }] } } : undefined));
+    const ok = runtimeFor({}, (c) => (c.path === "/v1/capabilities" ? { json: { principal: "apikey", surfaces: [], tools: [], memories: [{ name: "Secret plans", kind: "text" }] } } : undefined));
     const status = await (await open(ok.runtime, { kind: "host", operation: "status" })).health();
     expect(status).toEqual({ status: "ready" });
     expect(JSON.stringify(status)).not.toContain("Secret plans");

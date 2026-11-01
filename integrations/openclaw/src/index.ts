@@ -39,7 +39,7 @@ const RECALL_MAX_QUERY_CHARS = 2_000;
 const FLUSH_PROMPT =
   "Before this conversation is compacted, save to Membase what the user would want kept: decisions, " +
   "standing preferences, commitments and project facts from this conversation. Call membase_save once " +
-  "per fact, in the user's own words; use static: true only for lasting facts about the user themself. " +
+  "per fact, in the user's own words. " +
   "Skip small talk, anything already saved, secrets and credentials, and what other people said. " +
   "If nothing qualifies, reply NO_REPLY.";
 
@@ -100,7 +100,6 @@ function registerAutoRecall(api: OpenClawPluginApi, config: MembasePluginConfig,
           clients.recall().search({
             q: query,
             limit: RECALL_LIMIT,
-            ...(config.container ? { container: config.container } : {}),
           }),
           config.recallBudgetMs,
         );
@@ -114,11 +113,11 @@ function registerAutoRecall(api: OpenClawPluginApi, config: MembasePluginConfig,
         return;
       }
       const result = outcome.value;
-      const failed = (result.containers ?? []).filter((c) => c.error);
+      const failed = (result.partial ?? []).filter((p) => p.reason !== "truncated");
       if (failed.length) {
         api.logger.warn(`membase: ${failed.length} Memory(s) could not answer automatic recall`);
       }
-      if (!result.results?.length && !failed.length) return;
+      if (!result.items?.length && !failed.length) return;
 
       // The turn, its tool surface and its audience must still be the ones this recall was for.
       ctx.toolAuthority.assertActive();

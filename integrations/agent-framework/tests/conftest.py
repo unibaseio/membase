@@ -25,14 +25,17 @@ class FakeMembase:
 
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []
-        self.containers = [
-            {"id": "mv-decisions", "name": "Project decisions"},
-            {"id": "mv-travel", "name": "Travel"},
-        ]
+        self.write_target: str | None = "Travel"  # None: the key reaches several Memories
         self.results: list[dict[str, Any]] = [
-            {"content": "We settled on Postgres for the ledger.", "container_name": "Project decisions"},
+            {
+                "type": "memory",
+                "id": "mem_bGVkZ2Vy",
+                "content": "We settled on Postgres for the ledger.",
+                "score": 1.0,
+                "memory_name": "Project decisions",
+            },
         ]
-        self.container_errors: list[dict[str, Any]] = []
+        self.partial: list[dict[str, Any]] = []
         self.status: dict[str, int] = {}  # path -> forced status
         self.delay: float = 0.0
         self.profile = {"static": ["Works in Berlin"], "dynamic": ["Prefers dark mode"], "results": []}
@@ -57,28 +60,24 @@ class FakeMembase:
                 forced, json={"error": {"code": "unauthorized", "message": f"forced {forced}"}}
             )
         if path == "/v1/search":
-            return httpx.Response(200, json={"results": self.results, "containers": self.container_errors})
-        if path == "/v1/containers":
-            return httpx.Response(200, json={"containers": self.containers})
+            if extra := set(body) - {"q", "limit", "mode"}:
+                return _error(422, "validation", f"unknown fields: {sorted(extra)}")
+            return httpx.Response(200, json={"items": self.results, "partial": self.partial})
         if path == "/v1/profile":
             return httpx.Response(200, json=self.profile)
-        if path == "/v1/memories":
-            if body.get("static"):
-                return httpx.Response(
-                    202, json={"static": True, "status": "recorded", "content": body["content"]}
-                )
-            if body.get("container") is None and len(self.containers) > 1:
-                return httpx.Response(
-                    400,
-                    json={
-                        "error": {
-                            "code": "validation",
-                            "message": "container is required with several in reach",
-                        }
-                    },
-                )
+        if path == "/v1/memories" and request.method == "POST":
+            if extra := set(body) - {"content", "title"}:
+                return _error(422, "validation", f"unknown fields: {sorted(extra)}")
+            if self.write_target is None:
+                return _error(422, "write_target_required", "reaches 2 Memories and has no write target")
             return httpx.Response(
-                202, json={"memory_id": "m1", "document_id": "d1", "status": "queued", "learning_run": None}
+                202,
+                json={
+                    "id": "doc_bm90ZQ",
+                    "kind": "note",
+                    "status": "processing",
+                    "learning": [{"memory_name": self.write_target, "status": "processing"}],
+                },
             )
         return httpx.Response(404, json={"error": {"code": "not_found", "message": path}})
 
@@ -88,6 +87,10 @@ class FakeMembase:
 
     def calls(self, path: str) -> list[dict[str, Any]]:
         return [r for r in self.requests if r["path"] == path]
+
+
+def _error(status: int, code: str, message: str) -> httpx.Response:
+    return httpx.Response(status, json={"error": {"code": code, "message": message}})
 
 
 class ScriptedChatClient(FunctionInvocationLayer[Any], BaseChatClient[Any]):

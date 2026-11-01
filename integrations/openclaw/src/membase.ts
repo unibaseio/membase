@@ -11,6 +11,7 @@ import {
   PermissionDeniedError,
   RateLimitError,
   UnprocessableEntityError,
+  WriteTargetRequiredError,
   type SearchResult,
 } from "membase-sdk";
 import type { MembasePluginConfig } from "./config.js";
@@ -102,6 +103,12 @@ export type MembaseOperation = "search" | "save" | "profile" | "status";
 export function describeError(error: unknown, op: MembaseOperation): string {
   if (error instanceof NotConfiguredError) return error.message;
   const detail = error instanceof Error && error.message ? ` (${error.message})` : "";
+  if (error instanceof WriteTargetRequiredError) {
+    return (
+      "Membase saved nothing (422): this key reaches several Memories and has no write target. Give the " +
+      `key a single Memory under Connect > Developer keys${detail}.`
+    );
+  }
   if (error instanceof PermissionDeniedError) {
     if (op === "profile") {
       return (
@@ -111,13 +118,13 @@ export function describeError(error: unknown, op: MembaseOperation): string {
     }
     if (op === "save") {
       return (
-        "Membase refused the save (403): saving needs a Read & write key that reaches this Memory; " +
+        "Membase refused the save (403): saving needs a Read & write key; " +
         `this key was narrowed or revoked, or is Read only. Do not retry with this key${detail}.`
       );
     }
     return (
-      "Membase refused this key (403): its owner narrowed or revoked it, or the Memory is outside its " +
-      `reach. Do not retry with this key; mint or widen one under Connect > Developer keys${detail}.`
+      "Membase refused this key (403): its owner narrowed or revoked it. Do not retry with this key; " +
+      `mint or widen one under Connect > Developer keys${detail}.`
     );
   }
   if (error instanceof AuthenticationError) {
@@ -155,8 +162,8 @@ export function formatSearch(result: SearchResult, opts: { maxChars?: number } =
   const maxChars = opts.maxChars ?? Number.POSITIVE_INFINITY;
   const lines: string[] = [];
   let used = 0;
-  for (const hit of result.results ?? []) {
-    const where = hit.container_name || hit.container || "Membase";
+  for (const hit of result.items ?? []) {
+    const where = hit.memory_name || "Membase";
     const content = String(hit.content ?? "").trim();
     if (!content) continue;
     const line = `- [${where}] ${content}`;
@@ -164,9 +171,10 @@ export function formatSearch(result: SearchResult, opts: { maxChars?: number } =
     lines.push(line);
     used += line.length;
   }
-  const failed = (result.containers ?? []).filter((c) => c.error);
-  const notes = failed.map(
-    (c) => `- Memory "${c.name || c.id}" could not answer: ${c.error}. An empty answer from it is not evidence of no memory.`,
+  const notes = (result.partial ?? []).map((p) =>
+    p.reason === "truncated"
+      ? `- Memory "${p.memory_name}" had more passages than fit in this answer.`
+      : `- Memory "${p.memory_name}" could not answer. An empty answer from it is not evidence of no memory.`,
   );
   if (!lines.length && !notes.length) return "No matching memories in Membase.";
   const parts: string[] = [];

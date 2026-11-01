@@ -33,8 +33,8 @@ async def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     store = MembaseMemoryStore()  # MEMBASE_API_KEY / MEMBASE_BASE_URL from the environment
-    containers = store.client.containers.list()["containers"]
-    print("Memories in reach:", [c["name"] for c in containers])
+    caps = store.client.capabilities()
+    print("Memories in reach:", [m["name"] for m in caps.get("memories") or []])
 
     # 1. Explicit search through the tool (SDK timeout, so a cold start is waited out).
     started = time.monotonic()
@@ -55,10 +55,7 @@ async def main() -> int:
     print("\nmembase_profile:\n" + await tool(store, "membase_profile")())
 
     if os.environ.get("MEMBASE_SMOKE_SAVE") == "1":
-        target = containers[0]["name"] if containers else None
-        out = await tool(store, "membase_save")(
-            content="Membase Strands smoke test: this note can be deleted.", container=target
-        )
+        out = await tool(store, "membase_save")(content="Membase Strands smoke test: this note can be deleted.")
         print("\nmembase_save:", out)
 
     # 4. One real agent turn, if a model is configured.

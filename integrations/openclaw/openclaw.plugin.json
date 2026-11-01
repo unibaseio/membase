@@ -2,7 +2,7 @@
   "id": "membase",
   "name": "Membase",
   "description": "Your Membase account as the agent's memory: time-boxed recall before each turn, plus membase_search, membase_save (only when asked) and membase_profile tools. One API key is one person's memory.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "kind": "memory",
   "categories": [
     "memory"
@@ -33,18 +33,13 @@
       "label": "Membase API key",
       "sensitive": true,
       "placeholder": "mbk_...",
-      "help": "A developer key from Connect > Developer keys in the Membase app (Read, or Read & write to save). Prefer a SecretRef or ${MEMBASE_API_KEY}; when unset the MEMBASE_API_KEY environment variable is used."
+      "help": "A developer key from Connect > Developer keys in the Membase app (Read, or Read & write to save; saves go to the key's write target, so a saving key reaches one Memory). Prefer a SecretRef or ${MEMBASE_API_KEY}; when unset the MEMBASE_API_KEY environment variable is used."
     },
     "baseUrl": {
       "label": "API base URL",
       "placeholder": "https://api.app.membase.com",
       "advanced": true,
       "help": "Only for a self-hosted or local Membase server (membase --local serve)."
-    },
-    "container": {
-      "label": "Default Memory (container id)",
-      "placeholder": "mv-...",
-      "help": "Where membase_save writes when the model names no container, and the one Memory automatic recall searches. Leave empty to search every Memory the key reaches."
     },
     "recallBudgetMs": {
       "label": "Recall budget (ms)",
@@ -77,10 +72,6 @@
       "baseUrl": {
         "type": "string",
         "description": "API base URL; defaults to MEMBASE_BASE_URL, then https://api.app.membase.com."
-      },
-      "container": {
-        "type": "string",
-        "description": "Default container id for saves and automatic recall."
       },
       "recallBudgetMs": {
         "type": "integer",

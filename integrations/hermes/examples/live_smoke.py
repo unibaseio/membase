@@ -6,7 +6,7 @@
 Hermes must be importable (see README, "Development"). The script runs the plugin's register(ctx)
 in a throwaway HERMES_HOME and drives the provider through Hermes' MemoryManager exactly as an agent
 turn does: prefetch (time-boxed recall), then the tools. Without --write nothing is written to the
-account. Optional: MEMBASE_BASE_URL, MEMBASE_CONTAINER. (The offline tests cover Hermes' plugin
+account. Optional: MEMBASE_BASE_URL. (The offline tests cover Hermes' plugin
 loader itself.)
 """
 

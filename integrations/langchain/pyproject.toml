@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "langchain-membase"
-version = "0.1.0"
+version = "0.2.0"
 description = "Membase long-term memory for LangChain and LangGraph: a retriever, agent tools and a recall middleware."
 readme = "README.md"
 license = "MIT"
@@ -23,7 +23,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "unibaseio-membase>=0.3.2",
+    "unibaseio-membase>=0.4.0",
     "langchain-core>=1.0,<2",
 ]
 

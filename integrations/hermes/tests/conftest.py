@@ -22,7 +22,7 @@ from typing import Any, Optional
 _SESSION_HOME = Path(tempfile.mkdtemp(prefix="hermes-membase-tests-"))
 os.environ["HERMES_HOME"] = str(_SESSION_HOME)
 atexit.register(shutil.rmtree, _SESSION_HOME, ignore_errors=True)
-for _var in ("MEMBASE_API_KEY", "MEMBASE_BASE_URL", "MEMBASE_CONTAINER", "MEMBASE_LOCAL"):
+for _var in ("MEMBASE_API_KEY", "MEMBASE_BASE_URL", "MEMBASE_LOCAL"):
     os.environ.pop(_var, None)
 
 import httpx  # noqa: E402
@@ -30,26 +30,23 @@ import pytest  # noqa: E402
 
 PLUGIN_ROOT = Path(__file__).resolve().parent.parent
 KEY = "mbk_test_owner_key"
-CONTAINERS = [
-    {"id": "mv-decisions", "name": "Project decisions", "description": ""},
-    {"id": "mv-travel", "name": "Travel", "description": ""},
-]
 
 
 class FakeMembase:
-    """Just enough of the Membase REST API (POST /v1/search, GET /v1/profile, POST /v1/memories,
-    GET /v1/containers). ``fail`` maps a path to a status code, an exception or a callable."""
+    """Just enough of the Membase memory API (POST /v1/search, GET /v1/profile, POST /v1/memories).
+    ``fail`` maps a path to a status code, an exception or a callable. ``write_target`` is the Memory a
+    save lands in; None stands for a key that reaches several and has none."""
 
     def __init__(self) -> None:
         self.requests: list[httpx.Request] = []
-        self.containers = [dict(c) for c in CONTAINERS]
+        self.write_target: Optional[str] = "Project decisions"
         self.search_response: dict[str, Any] = {
-            "results": [
-                {"content": "We settled on Postgres for the ledger.", "container_name": "Project decisions",
-                 "container": "mv-decisions"},
-                {"content": "Window seat, always.", "container_name": "Travel", "container": "mv-travel"},
+            "items": [
+                {"type": "memory", "id": "mem_eA", "content": "We settled on Postgres for the ledger.",
+                 "score": 1.0, "memory_name": "Project decisions"},
+                {"type": "document", "content": "Window seat, always.", "score": 0.6, "memory_name": "Travel"},
             ],
-            "containers": [{"id": "mv-decisions", "name": "Project decisions"}, {"id": "mv-travel", "name": "Travel"}],
+            "partial": [],
         }
         self.profile_response: dict[str, Any] = {
             "static": ["Works on the ledger service."], "dynamic": ["Planning a trip to Lisbon."], "results": [],
@@ -89,21 +86,20 @@ class FakeMembase:
             return self.error(failure, f"refused with {failure}")
         if not request.headers.get("authorization", "").startswith("Bearer "):
             return self.error(401, "no bearer")
-        if path == "/v1/containers" and request.method == "GET":
-            return httpx.Response(200, json={"containers": self.containers})
         if path == "/v1/search" and request.method == "POST":
             return httpx.Response(200, json=self.search_response)
         if path == "/v1/profile" and request.method == "GET":
             return httpx.Response(200, json=self.profile_response)
         if path == "/v1/memories" and request.method == "POST":
-            body = self.body(request)
-            if body.get("static"):
-                return httpx.Response(202, json={"static": True, "status": "recorded", "run_id": "run-1",
-                                                 "content": body["content"]})
-            if not body.get("container") and len(self.containers) > 1:
-                return self.error(400, "several containers in reach: pass container", code="validation")
-            return httpx.Response(202, json={"memory_id": "mem-1", "document_id": "srcitem_1", "status": "queued",
-                                             "learning_run": {"id": "run-2"}})
+            unknown = set(self.body(request)) - {"content", "title"}
+            if unknown:
+                return self.error(422, f"unknown fields {sorted(unknown)}", code="validation")
+            if self.write_target is None:
+                return self.error(422, "this credential reaches 2 Memories and has no write target",
+                                  code="write_target_required")
+            return httpx.Response(202, json={"id": "doc_bm90ZQ", "kind": "note", "status": "processing",
+                                             "learning": [{"memory_name": self.write_target,
+                                                           "status": "processing"}]})
         return httpx.Response(404, json={"error": {"code": "not_found", "message": path}})
 
 
@@ -125,8 +121,7 @@ def home(tmp_path, monkeypatch) -> Path:
     (h / "config.yaml").write_text("memory:\n  provider: unibaseio-membase\n", encoding="utf-8")
     monkeypatch.setenv("HERMES_HOME", str(h))
     monkeypatch.setenv("MEMBASE_API_KEY", KEY)
-    for var in ("MEMBASE_BASE_URL", "MEMBASE_CONTAINER"):
-        monkeypatch.delenv(var, raising=False)
+    monkeypatch.delenv("MEMBASE_BASE_URL", raising=False)
     return h
 
 

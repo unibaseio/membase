@@ -38,10 +38,6 @@ class FakeMembase:
 
     def __init__(self) -> None:
         self.requests: list[httpx.Request] = []
-        self.containers = [
-            {"id": "mv-decisions", "name": "Project decisions"},
-            {"id": "mv-travel", "name": "Travel"},
-        ]
         self.routes: dict[tuple[str, str], object] = {}
 
     def on(self, method: str, path: str, answer) -> None:
@@ -55,8 +51,11 @@ class FakeMembase:
         if answer is not None:
             status, body = answer
             return httpx.Response(status, json=body)
-        if (request.method, request.url.path) == ("GET", "/v1/containers"):
-            return httpx.Response(200, json={"containers": self.containers})
+        if (request.method, request.url.path) == ("GET", "/v1/capabilities"):
+            return httpx.Response(
+                200,
+                json={"principal": "apikey", "surfaces": [], "tools": [], "actions": ["search"]},
+            )
         return httpx.Response(404, json={"error": {"code": "not_found", "message": "no route"}})
 
     def calls(self, method: str, path: str) -> list[httpx.Request]:
@@ -127,8 +126,8 @@ def test_runtime_registers_exactly_the_three_tools(executor):
         assert config.description.llm.strip()
         for p in config.parameters:
             assert p.label.zh_hans != p.label.en_us  # zh_Hans written, not defaulted
-            # No parameter can ask Membase to delete or to confirm anything.
-            assert p.name not in {"confirm", "delete", "forget"}
+            # No parameter can ask Membase to delete or to confirm anything, or name a Memory.
+            assert p.name not in {"confirm", "delete", "forget", "container", "static"}
 
 
 def test_manifest_points_at_privacy_icon_and_declares_domains():
@@ -145,9 +144,9 @@ def test_manifest_points_at_privacy_icon_and_declares_domains():
 # ---------------------------------------------------------------- credentials
 
 
-def test_validation_lists_containers_with_the_key(executor, membase):
+def test_validation_reads_the_keys_capabilities(executor, membase):
     assert validate(executor, {"api_key": f"  {KEY} "}) == {"result": True}
-    (call,) = membase.calls("GET", "/v1/containers")
+    (call,) = membase.calls("GET", "/v1/capabilities")
     assert call.headers["authorization"] == f"Bearer {KEY}"
     assert membase.base_urls == ["https://api.app.membase.com"]
 
@@ -157,7 +156,7 @@ def test_validation_surfaces_403_without_echoing_the_key(executor, membase):
 
     membase.on(
         "GET",
-        "/v1/containers",
+        "/v1/capabilities",
         (403, {"error": {"code": "unauthorized", "message": "invalid or revoked key"}}),
     )
     with pytest.raises(ToolProviderCredentialValidationError) as err:
@@ -165,7 +164,7 @@ def test_validation_surfaces_403_without_echoing_the_key(executor, membase):
     message = str(err.value)
     assert "403" in message and "revoked" in message and "Developer keys" in message
     assert KEY not in message
-    assert len(membase.calls("GET", "/v1/containers")) == 1  # a 403 is never retried
+    assert len(membase.calls("GET", "/v1/capabilities")) == 1  # a 403 is never retried
 
 
 def test_validation_requires_a_key(executor, membase):
@@ -206,80 +205,63 @@ def test_a_membase_base_url_is_used(executor, membase):
 
 
 SEARCH_ANSWER = {
-    "query": "database",
-    "results": [
+    "items": [
         {
+            "type": "memory",
+            "id": "mem_eA",
             "content": "We settled on Postgres for the ledger.",
             "score": 0.9,
-            "container": "mv-decisions",
-            "container_name": "Project decisions",
-            "source": "12",
+            "memory_name": "Project decisions",
         },
         {
+            "type": "document",
             "content": "Flights to Lisbon on the 3rd.",
             "score": 0.4,
-            "container": "mv-travel",
-            "container_name": "Travel",
-            "source": "7",
+            "memory_name": "Travel",
+            "title": "Trip",
         },
     ],
-    "containers": [
-        {"id": "mv-decisions", "name": "Project decisions"},
-        {"id": "mv-travel", "name": "Travel"},
-    ],
+    "partial": [],
 }
 
 
-def test_search_cites_each_container(executor, membase):
+def test_search_cites_each_memory(executor, membase):
     membase.on("POST", "/v1/search", (200, SEARCH_ANSWER))
     text, data = invoke(executor, "search_memory", {"query": "database", "limit": 5})
     assert "1. [Project decisions] We settled on Postgres for the ledger." in text
     assert "2. [Travel] Flights to Lisbon on the 3rd." in text
-    assert [r["container_name"] for r in data["results"]] == ["Project decisions", "Travel"]
+    assert data == {"query": "database", **SEARCH_ANSWER}
     (call,) = membase.calls("POST", "/v1/search")
-    assert body(call) == {"q": "database", "limit": 5}
-    assert membase.calls("GET", "/v1/containers") == []  # no container named, no lookup
+    assert body(call) == {"q": "database", "mode": "full", "limit": 5}
 
 
-def test_search_resolves_a_container_name_to_its_id(executor, membase):
-    membase.on(
-        "POST", "/v1/search", (200, {**SEARCH_ANSWER, "results": SEARCH_ANSWER["results"][:1]})
-    )
-    invoke(executor, "search_memory", {"query": "database", "container": "project DECISIONS"})
-    assert body(membase.calls("POST", "/v1/search")[0]) == {
-        "q": "database",
-        "container": "mv-decisions",
-    }
+def test_search_never_names_a_memory(executor, membase):
+    membase.on("POST", "/v1/search", (200, SEARCH_ANSWER))
+    invoke(executor, "search_memory", {"query": "database", "container": "Project decisions"})
+    assert "container" not in body(membase.calls("POST", "/v1/search")[0])
 
 
-def test_search_names_the_containers_when_one_is_unknown(executor, membase):
-    from membase_dify.client import MembaseToolError
-
-    with pytest.raises(MembaseToolError) as err:
-        invoke(executor, "search_memory", {"query": "x", "container": "Recipes"})
-    assert "Project decisions (mv-decisions)" in str(err.value)
-    assert membase.calls("POST", "/v1/search") == []
-
-
-def test_search_reports_a_container_that_could_not_answer(executor, membase):
+def test_search_reports_a_memory_that_could_not_answer(executor, membase):
     membase.on(
         "POST",
         "/v1/search",
         (
             200,
             {
-                "results": [],
-                "containers": [
-                    {"id": "mv-decisions", "name": "Project decisions", "error": "no working model"}
+                "items": [],
+                "partial": [
+                    {"memory_name": "Project decisions", "reason": "error"},
+                    {"memory_name": "Travel", "reason": "truncated"},
                 ],
             },
         ),
     )
     text, data = invoke(executor, "search_memory", {"query": "database"})
     assert "No memories matched." in text
-    assert "Could not search container 'Project decisions': no working model" in text
+    assert "Could not search the Memory 'Project decisions'" in text
     assert "not the same as no match" in text
-    assert data["unavailable_containers"][0]["error"] == "no working model"
+    assert "Travel" not in text  # truncated: it answered, its passages lost to the limit
+    assert data["partial"][0] == {"memory_name": "Project decisions", "reason": "error"}
 
 
 def test_search_403_is_reported_and_not_retried(executor, membase):
@@ -288,11 +270,11 @@ def test_search_403_is_reported_and_not_retried(executor, membase):
     membase.on(
         "POST",
         "/v1/search",
-        (403, {"error": {"code": "unauthorized", "message": "may not use that container"}}),
+        (403, {"error": {"code": "unauthorized", "message": "key revoked"}}),
     )
     with pytest.raises(MembaseToolError) as err:
         invoke(executor, "search_memory", {"query": "database"})
-    assert "403: may not use that container" in str(err.value)
+    assert "403: key revoked" in str(err.value)
     assert "revoked or narrowed" in str(err.value)
     assert len(membase.calls("POST", "/v1/search")) == 1
 
@@ -320,54 +302,53 @@ def test_search_requires_a_query(executor, membase):
 # ---------------------------------------------------------------- save_memory
 
 
-def test_save_to_a_named_container(executor, membase):
-    membase.on(
-        "POST",
-        "/v1/memories",
-        (202, {"memory_id": "m1", "document_id": "srcitem_1", "status": "queued"}),
-    )
-    text, data = invoke(
-        executor,
-        "save_memory",
-        {"content": "We settled on Postgres.", "container": "Project decisions"},
-    )
+RECEIPT = {
+    "id": "doc_bm90ZQ",
+    "kind": "note",
+    "status": "processing",
+    "learning": [{"memory_name": "Project decisions", "status": "processing"}],
+}
+
+
+def test_save_to_the_write_target(executor, membase):
+    membase.on("POST", "/v1/memories", (202, RECEIPT))
+    text, data = invoke(executor, "save_memory", {"content": "We settled on Postgres."})
     (call,) = membase.calls("POST", "/v1/memories")
-    assert body(call) == {
-        "content": "We settled on Postgres.",
-        "static": False,
-        "title": "",
-        "container": "mv-decisions",
-    }
-    assert "Saved to Project decisions (status: queued)" in text
-    assert data["container_name"] == "Project decisions" and data["status"] == "queued"
+    assert body(call) == {"content": "We settled on Postgres.", "title": ""}
+    assert "Saved to Project decisions (status: processing)" in text
+    assert data == RECEIPT
 
 
-def test_save_a_profile_fact(executor, membase):
-    membase.on("POST", "/v1/memories", (202, {"static": True, "status": "recorded"}))
-    text, data = invoke(
-        executor,
-        "save_memory",
-        {"content": "I prefer dark mode.", "static": "true", "container": "Travel"},
+def test_save_ignores_retired_parameters(executor, membase):
+    membase.on("POST", "/v1/memories", (202, RECEIPT))
+    invoke(
+        executor, "save_memory", {"content": "Dark mode.", "container": "Travel", "static": True}
     )
-    (call,) = membase.calls("POST", "/v1/memories")
-    assert body(call) == {"content": "I prefer dark mode.", "static": True, "title": ""}
-    assert membase.calls("GET", "/v1/containers") == []
-    assert "profile" in text and data["status"] == "recorded"
+    assert body(membase.calls("POST", "/v1/memories")[0]) == {"content": "Dark mode.", "title": ""}
 
 
-def test_save_without_a_container_lists_the_choices(executor, membase):
+def test_save_without_a_write_target_says_nothing_was_saved(executor, membase):
     from membase_dify.client import MembaseToolError
 
     membase.on(
         "POST",
         "/v1/memories",
-        (400, {"error": {"code": "validation", "message": "container is required"}}),
+        (
+            422,
+            {
+                "error": {
+                    "code": "write_target_required",
+                    "message": "this credential reaches 2 Memories and has no write target",
+                }
+            },
+        ),
     )
     with pytest.raises(MembaseToolError) as err:
         invoke(executor, "save_memory", {"content": "Note this."})
-    assert "container is required" in str(err.value)
-    assert "Project decisions (mv-decisions), Travel (mv-travel)" in str(err.value)
-    assert "container" not in body(membase.calls("POST", "/v1/memories")[0])
+    message = str(err.value)
+    assert "several Memories and has no write target, so nothing was saved" in message
+    assert "Developer keys" in message
+    assert len(membase.calls("POST", "/v1/memories")) == 1
 
 
 def test_save_with_a_read_only_key_is_refused(executor, membase):
@@ -387,7 +368,7 @@ def test_save_with_a_read_only_key_is_refused(executor, membase):
         ),
     )
     with pytest.raises(MembaseToolError) as err:
-        invoke(executor, "save_memory", {"content": "x", "container": "mv-travel"})
+        invoke(executor, "save_memory", {"content": "x"})
     assert "Read key cannot save" in str(err.value)
     assert len(membase.calls("POST", "/v1/memories")) == 1
 
@@ -420,12 +401,13 @@ def test_profile_lists_standing_and_recent_facts(executor, membase):
     assert membase.calls("GET", "/v1/profile")[0].url.params.get("q") is None
 
 
-def test_profile_with_a_topic_cites_containers(executor, membase):
-    membase.on(
-        "GET",
-        "/v1/profile",
-        (200, {**PROFILE, "results": SEARCH_ANSWER["results"][:1]}),
-    )
+def test_profile_with_a_topic_cites_memories(executor, membase):
+    # The profile's topic results keep the search passages' former shape (container_name).
+    passage = {
+        "content": "We settled on Postgres for the ledger.",
+        "container_name": "Project decisions",
+    }
+    membase.on("GET", "/v1/profile", (200, {**PROFILE, "results": [passage]}))
     text, _ = invoke(executor, "get_profile", {"query": "database"})
     assert "- [Project decisions] We settled on Postgres for the ledger." in text
     assert membase.calls("GET", "/v1/profile")[0].url.params["q"] == "database"
