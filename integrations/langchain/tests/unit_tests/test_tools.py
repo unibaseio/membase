@@ -75,7 +75,7 @@ def test_search_revoked_key_message(fake: FakeMembase) -> None:
 def test_save_lands_in_the_write_target(fake: FakeMembase) -> None:
     msg = call(MembaseSaveTool(client=fake.client()), {"content": "We settled on Postgres."})
     assert msg.content.startswith("Saved to Project decisions.")
-    assert fake.paths() == ["/v1/memories"]
+    assert fake.paths() == ["/v1/memories/add"]
     assert fake.requests[-1]["body"] == {"content": "We settled on Postgres.", "title": ""}
     assert "confirm" not in fake.requests[-1]["params"]
 

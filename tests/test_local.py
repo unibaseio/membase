@@ -245,10 +245,10 @@ def test_refusals_answer_in_the_error_envelope(local):
 @pytest.mark.parametrize("path, body", [
     ("/v1/search", {"q": "x", "container": "default"}),
     ("/v1/search", {"q": "x", "threshold": 0.5}),
-    ("/v1/memories", {"content": "x", "container": "default"}),
-    ("/v1/memories", {"content": "x", "static": True}),
-    ("/v1/documents", {"content": "x", "container": "default"}),
-    ("/v1/documents", {"content": "x", "metadata": {}}),
+    ("/v1/memories/add", {"content": "x", "container": "default"}),
+    ("/v1/memories/add", {"content": "x", "static": True}),
+    ("/v1/documents/add", {"content": "x", "container": "default"}),
+    ("/v1/documents/add", {"content": "x", "metadata": {}}),
     ("/v1/media/search", {"q": "x", "container": "default"}),
 ])
 def test_unknown_fields_are_refused(local, path, body):
@@ -261,6 +261,12 @@ def test_unknown_fields_are_refused(local, path, body):
 
 def test_the_retired_routes_are_gone(local):
     assert local._http.get("/v1/containers").status_code == 404
+    # writes are POST + an action; the old method on the old path is not allowed
+    assert local._http.post("/v1/memories", json={"content": "x"}).status_code == 405
+    assert local._http.post("/v1/documents", json={"content": "x"}).status_code == 405
+    for path in ("/v1/memories/mem_x", "/v1/documents/doc_x", "/v1/media/med_x"):
+        r = local._http.delete(path, params={"confirm": "true"})
+        assert r.status_code == 405 and r.json()["error"]["code"] == "method_not_allowed", path
 
 
 def test_the_http_server_answers_the_same_routes(tmp_path):
@@ -272,8 +278,10 @@ def test_the_http_server_answers_the_same_routes(tmp_path):
         assert remote.memories.list() == EMPTY_LIST
         assert httpx.get(f"{base}/v1/nope").status_code == 404
         missing = ids.encode("memory", "default:999")
-        r = httpx.delete(f"{base}/v1/memories/{missing}", params={"confirm": "true"})
+        r = httpx.post(f"{base}/v1/memories/{missing}/forget", params={"confirm": "true"})
         assert r.status_code == 404 and r.json()["error"]["details"] == {"id": missing}
+        r = httpx.delete(f"{base}/v1/memories/{missing}", params={"confirm": "true"})
+        assert r.status_code == 405 and r.json()["error"]["code"] == "method_not_allowed"
         r = httpx.post(f"{base}/v1/search", content=b"{not json", headers={"Content-Type": "application/json"})
         assert r.status_code == 422
         remote.close()

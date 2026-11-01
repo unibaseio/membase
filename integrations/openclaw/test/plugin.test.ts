@@ -203,7 +203,7 @@ describe("membase_search", () => {
 describe("membase_save", () => {
   it("saves the user's words into the key's write target", async () => {
     const { rec, calls } = setup({}, (c) =>
-      c.path === "/v1/memories"
+      c.path === "/v1/memories/add"
         ? {
             status: 202,
             json: { id: "doc_bm90ZQ", kind: "note", status: "processing", learning: [{ memory_name: "Project decisions", status: "processing" }] },
@@ -211,7 +211,7 @@ describe("membase_save", () => {
         : undefined,
     );
     const out = await tool(rec, "membase_save", ownerCtx())!.execute("c", { content: "  We chose Postgres.  " });
-    expect(calls[0]).toMatchObject({ method: "POST", path: "/v1/memories" });
+    expect(calls[0]).toMatchObject({ method: "POST", path: "/v1/memories/add" });
     expect(calls[0].body).toEqual({ content: "We chose Postgres.", title: "" });
     expect(textOf(out as any)).toMatch(/Saved to Membase in Project decisions \(note doc_bm90ZQ\); learning processing/);
   });

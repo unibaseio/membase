@@ -63,7 +63,7 @@ describe("Membase", () => {
 
     const added = await c.add({ content: "hello", customId: "d1" });
     expect(added.id).toBe("doc_ZmlsZQ");
-    expect(calls[0].url.toString()).toBe("https://api.example.test/v1/documents");
+    expect(calls[0].url.toString()).toBe("https://api.example.test/v1/documents/add");
     expect(calls[0].init.method).toBe("POST");
     expect((calls[0].init.headers as Record<string, string>).Authorization).toBe("Bearer mbk_test");
 
@@ -86,20 +86,20 @@ describe("Membase", () => {
 
     const seen = calls.map((x) => [x.init.method, x.url.pathname + x.url.search, x.init.body ? JSON.parse(String(x.init.body)) : undefined]);
     expect(seen).toEqual([
-      ["POST", "/v1/documents", { content: "hello", title: "", custom_id: "d1" }],
+      ["POST", "/v1/documents/add", { content: "hello", title: "", custom_id: "d1" }],
       ["POST", "/v1/search", { q: "q", limit: 5, mode: "full" }],
       ["POST", "/v1/search", { q: "q", mode: "fast" }],
       ["GET", "/v1/memories?limit=3", undefined],
       ["GET", "/v1/memories/mem_eA", undefined],
-      ["POST", "/v1/memories", { content: "dark mode", title: "" }],
-      ["DELETE", "/v1/memories/mem_eA?confirm=true", undefined],
+      ["POST", "/v1/memories/add", { content: "dark mode", title: "" }],
+      ["POST", "/v1/memories/mem_eA/forget?confirm=true", undefined],
       ["GET", "/v1/documents?kind=note&limit=10", undefined],
       ["GET", "/v1/documents/doc_ZmlsZQ", undefined],
-      ["DELETE", "/v1/documents/doc_ZmlsZQ?confirm=false", undefined],
+      ["POST", "/v1/documents/doc_ZmlsZQ/delete?confirm=false", undefined],
       ["GET", "/v1/media?limit=2", undefined],
       ["GET", "/v1/media/med_eA", undefined],
       ["POST", "/v1/media/search", { q: "skiing", kind: "video" }],
-      ["DELETE", "/v1/media/med_eA?confirm=true", undefined],
+      ["POST", "/v1/media/med_eA/delete?confirm=true", undefined],
       ["GET", "/v1/profile?q=hours", undefined],
       ["GET", "/v1/capabilities", undefined],
     ]);

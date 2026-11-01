@@ -104,7 +104,7 @@ async def test_revoked_key_is_reported_and_not_retried(mem, caplog):
 async def test_capture_is_off_by_default(mem):
     agent = Agent(client=ScriptedChatClient(), context_providers=[MembaseContextProvider(mem.client())])
     await agent.run("remember that I take the window seat")
-    assert mem.calls("/v1/memories") == []
+    assert mem.calls("/v1/memories/add") == []
 
 
 async def test_capture_saves_the_users_words_once_per_turn(mem):
@@ -120,7 +120,7 @@ async def test_capture_saves_the_users_words_once_per_turn(mem):
     provider = MembaseContextProvider(mem.client(), capture=True)
     agent = Agent(client=chat, tools=[noop], context_providers=[provider])
     await agent.run("I always take the window seat")
-    (saved,) = mem.calls("/v1/memories")
+    (saved,) = mem.calls("/v1/memories/add")
     assert saved["json"] == {
         "content": "I always take the window seat",
         "title": "Agent Framework conversation",
@@ -129,13 +129,13 @@ async def test_capture_saves_the_users_words_once_per_turn(mem):
 
 
 async def test_capture_with_a_read_key_stops_after_the_refusal(mem, caplog):
-    mem.status["/v1/memories"] = 403
+    mem.status["/v1/memories/add"] = 403
     provider = MembaseContextProvider(mem.client(), capture=True)
     agent = Agent(client=ScriptedChatClient(), context_providers=[provider])
     with caplog.at_level(logging.ERROR, logger="agent_framework_membase"):
         await agent.run("a")
         await agent.run("b")
-    assert len(mem.calls("/v1/memories")) == 1
+    assert len(mem.calls("/v1/memories/add")) == 1
     assert "a Read key cannot write" in caplog.text
 
 
@@ -214,5 +214,5 @@ async def test_capture_without_a_write_target_explains_how_to_fix_it(mem, caplog
     with caplog.at_level(logging.WARNING, logger="agent_framework_membase"):
         await agent.run("I always take the window seat")
         await agent.run("and the aisle on short flights")
-    assert len(mem.calls("/v1/memories")) == 1  # refused once, then not retried
+    assert len(mem.calls("/v1/memories/add")) == 1  # refused once, then not retried
     assert "no write target" in caplog.text and "Connect › Developer keys" in caplog.text

@@ -98,7 +98,7 @@ def test_middleware_recalls_once_per_user_message(fake: FakeMembase) -> None:
     searches = [r for r in fake.requests if r["path"] == "/v1/search"]
     assert [s["body"]["q"] for s in searches] == ["What about the ledger?", "ledger"]
     assert searches[0]["body"]["limit"] == 2
-    assert "/v1/memories" not in fake.paths()  # nothing is written unless asked
+    assert "/v1/memories/add" not in fake.paths()  # nothing is written unless asked
 
 
 def test_middleware_fails_open_within_its_budget(fake: FakeMembase, caplog) -> None:
@@ -141,9 +141,9 @@ def test_capture_turns_is_opt_in(fake: FakeMembase) -> None:
         {"messages": [{"role": "user", "content": "I like dark mode"}]}
     )
     deadline = time.monotonic() + 2
-    while "/v1/memories" not in fake.paths() and time.monotonic() < deadline:
+    while "/v1/memories/add" not in fake.paths() and time.monotonic() < deadline:
         time.sleep(0.01)
-    saved = [r for r in fake.requests if r["path"] == "/v1/memories"]
+    saved = [r for r in fake.requests if r["path"] == "/v1/memories/add"]
     assert len(saved) == 1
     assert saved[0]["body"]["content"] == "I like dark mode"  # the user's words, no AI reply
     assert "Noted" not in saved[0]["body"]["content"]
@@ -162,10 +162,10 @@ def test_capture_saves_only_the_users_messages_once_per_turn(fake: FakeMembase) 
     ]
     mw.after_agent(agent.invoke({"messages": history}), None)  # same turn seen twice
     deadline = time.monotonic() + 2
-    while "/v1/memories" not in fake.paths() and time.monotonic() < deadline:
+    while "/v1/memories/add" not in fake.paths() and time.monotonic() < deadline:
         time.sleep(0.01)
     time.sleep(0.1)
-    saved = [r["body"]["content"] for r in fake.requests if r["path"] == "/v1/memories"]
+    saved = [r["body"]["content"] for r in fake.requests if r["path"] == "/v1/memories/add"]
     assert saved == ["I moved to Lisbon.\n\nMy new office is in Alfama."]
 
 
@@ -202,7 +202,7 @@ def test_capture_routes_to_the_users_key(fake: FakeMembase) -> None:
         config={"configurable": {"user_id": "frank"}},
     )
     deadline = time.monotonic() + 2
-    while "/v1/memories" not in fake.paths() and time.monotonic() < deadline:
+    while "/v1/memories/add" not in fake.paths() and time.monotonic() < deadline:
         time.sleep(0.01)
     assert {r["key"] for r in fake.requests} == {"mbk_frank"}
-    assert "/v1/memories" in fake.paths()
+    assert "/v1/memories/add" in fake.paths()

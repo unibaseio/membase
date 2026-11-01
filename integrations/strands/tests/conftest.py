@@ -48,7 +48,7 @@ class FakeMembase:
             if self.search_status != 200:
                 return _error(self.search_status)
             return httpx.Response(200, json=self.search_body)
-        if path == "/v1/memories":
+        if path == "/v1/memories/add":
             if self.memories_status != 202:
                 return _error(self.memories_status)
             return httpx.Response(

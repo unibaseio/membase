@@ -207,13 +207,13 @@ class _Memories:
     def add(self, content: str, *, title: str = "") -> dict:
         """Save one fact into this key's write target. The receipt is the note it was written as:
         ``{id: "doc_…", kind: "note", status, learning}``."""
-        return self._c._request("POST", "/v1/memories", json={"content": content, "title": title})
+        return self._c._request("POST", "/v1/memories/add", json={"content": content, "title": title})
 
     def forget(self, memory_id: str, *, confirm: bool = False) -> dict:
         """Forget one learned fact (the material it came from stays). Needs Full access and
         ``confirm=True``; without it nothing changes and :class:`ConfirmationRequiredError` is
         raised."""
-        return self._c._request("DELETE", _path("memories", memory_id), params={"confirm": _flag(confirm)})
+        return self._c._request("POST", _path("memories", memory_id) + "/forget", params={"confirm": _flag(confirm)})
 
 
 class _Documents:
@@ -247,13 +247,13 @@ class _Documents:
             body["content"] = content
         if url is not None:
             body["url"] = url
-        return self._c._request("POST", "/v1/documents", json=body)
+        return self._c._request("POST", "/v1/documents/add", json=body)
 
     def delete(self, document_id: str, *, confirm: bool = False) -> dict:
         """Withdraw a document and what every Memory learned from it (hosted, the file goes to
         the Files trash). Needs Full access and ``confirm=True``; without it nothing changes and
         :class:`ConfirmationRequiredError` is raised."""
-        return self._c._request("DELETE", _path("documents", document_id), params={"confirm": _flag(confirm)})
+        return self._c._request("POST", _path("documents", document_id) + "/delete", params={"confirm": _flag(confirm)})
 
 
 def _flag(v: bool) -> str:

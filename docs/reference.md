@@ -26,7 +26,7 @@ token.
 - Ids are typed (`mem_…`, `doc_…`, `med_…`); lists are `{items, has_more, partial}`; unknown
   fields (a `container`, say) are a `422`; a removal without `confirm=true` is a `428`.
 - The engine learns before it answers, so a write's receipt and every document say
-  `status: "succeeded"`. A fact added with `POST /v1/memories` is kept as a note (a document of kind
+  `status: "succeeded"`. A fact added with `POST /v1/memories/add` is kept as a note (a document of kind
   `note`) whose deletion forgets what it taught, as hosted.
 - `/v1/capabilities` names every action (the media ones with the media extra installed).
 
@@ -74,7 +74,7 @@ Search runs in any language over captions and speech.
 | `POST /v1/media` `{path \| url, title?, custom_id?}` (local only) | `m.media.add(path, url=)` | `add_media` | `media add FILE \| --url` |
 | `GET /v1/media?limit=` | `m.media.list()` | `list_media` | `media list` |
 | `GET /v1/media/{id}` | `m.media.get(id)` | `get_media` | `media get ID` |
-| `DELETE /v1/media/{id}?confirm=` | `m.media.delete(id, confirm=)` | `delete_media` | `media delete ID [--confirm]` |
+| `POST /v1/media/{id}/delete?confirm=` | `m.media.delete(id, confirm=)` | `delete_media` | `media delete ID [--confirm]` |
 | `POST /v1/media/search` `{q, kind?, limit?}` | `m.media.search(q, kind=)` | `search_media` | `media search Q [--kind]` |
 | `POST /v1/media/ask` `{message}` (local only) | `m.media.ask(message)` | `ask_media` | `media ask MESSAGE` |
 | `GET /v1/media/{id}/file`, `/thumbs/{name}` | | | |

@@ -4,7 +4,8 @@
 
 `unibaseio-membase` 0.4.0, `@unibaseio/membase` 0.4.0, `@unibaseio/membase-cli` 0.4.0 and every
 integration (below) move to the Membase memory API. **This is a breaking change**: the request and
-answer shapes changed in place at the same `/v1` paths, and the earlier shapes are no longer served.
+answer shapes changed in place under `/v1`, the writes moved to `POST` + an action (below), and the
+earlier shapes and routes are no longer served.
 Earlier releases (0.3.x, npm 0.3.2) speak the earlier shapes and stop working against the hosted API
 once it serves the memory API.
 
@@ -30,6 +31,20 @@ once it serves the memory API.
 | media | local only, `container=` | `media.list(limit=)`, `get`, `search(q, kind=, limit=)`, `delete`; `med_…` ids; `file_url`/`thumb_url` routes |
 | removal without `confirm` | `200 {status: "confirmation_required", …}` | `428 confirmation_required` → `ConfirmationRequiredError`; nothing changes |
 | removal with `confirm=True` | varied | `{id, status: "forgotten"}` (facts) or `{id, status: "deleted"}` |
+
+### Writes are `POST` + an action
+
+Reads stay `GET` (and `POST /v1/search`, `POST /v1/media/search`, `POST /v1/ask`); every write is a
+`POST` naming its action. `confirm` stays a query parameter and the bodies are unchanged. The earlier
+method on the earlier path answers `405 method_not_allowed`. The SDK methods keep their names.
+
+| | 0.3 | 0.4 |
+|---|---|---|
+| `memories.add` | `POST /v1/memories` | `POST /v1/memories/add` |
+| `memories.forget` | `DELETE /v1/memories/{id}` | `POST /v1/memories/{id}/forget?confirm=` |
+| `add` / `documents.add` | `POST /v1/documents` | `POST /v1/documents/add` |
+| `documents.delete` | `DELETE /v1/documents/{id}` | `POST /v1/documents/{id}/delete?confirm=` |
+| `media.delete` | `DELETE /v1/media/{id}` | `POST /v1/media/{id}/delete?confirm=` |
 
 Every list is `{items, has_more, partial}`: the newest `limit` (1–1000, default 100), whether more
 were left out, and the Memories that could not answer. Learning status is `succeeded`, `processing`,

@@ -372,13 +372,13 @@ ACTIONS: dict[str, str] = {
 ROUTES: list[tuple[str, re.Pattern, Callable[..., Any], int]] = [
     ("POST", re.compile(r"^/v1/search$"), _search, 200),
     ("GET", re.compile(r"^/v1/memories$"), _list_memories, 200),
-    ("POST", re.compile(r"^/v1/memories$"), _add_memory, 202),
+    ("POST", re.compile(r"^/v1/memories/add$"), _add_memory, 202),
     ("GET", re.compile(r"^/v1/memories/(?P<id>[^/]+)$"), _get_memory, 200),
-    ("DELETE", re.compile(r"^/v1/memories/(?P<id>[^/]+)$"), _forget_memory, 200),
+    ("POST", re.compile(r"^/v1/memories/(?P<id>[^/]+)/forget$"), _forget_memory, 200),
     ("GET", re.compile(r"^/v1/documents$"), _list_documents, 200),
-    ("POST", re.compile(r"^/v1/documents$"), _add_document, 202),
+    ("POST", re.compile(r"^/v1/documents/add$"), _add_document, 202),
     ("GET", re.compile(r"^/v1/documents/(?P<id>[^/]+)$"), _get_document, 200),
-    ("DELETE", re.compile(r"^/v1/documents/(?P<id>[^/]+)$"), _delete_document, 200),
+    ("POST", re.compile(r"^/v1/documents/(?P<id>[^/]+)/delete$"), _delete_document, 200),
     ("GET", re.compile(r"^/v1/profile$"), lambda b, q, body, m: b.profile(q.get("q")), 200),
     ("GET", re.compile(r"^/v1/rules$"), lambda b, q, body, m: b.rules(), 200),
     ("POST", re.compile(r"^/v1/ask$"), _ask, 200),
@@ -425,8 +425,10 @@ def dispatch(
 ) -> tuple[int, Any]:
     """``(status, answer)`` for one request: JSON, or :class:`Raw` bytes for a media file; errors
     in the platform's envelope."""
+    served = False
     for verb, pattern, handler, ok in ROUTES:
         m = pattern.match(path)
+        served = served or bool(m)
         if m and verb == method.upper():
             try:
                 if body is not None and not isinstance(body, dict):
@@ -443,4 +445,6 @@ def dispatch(
                 return 422, error_body(422, "capability_unavailable", str(e))
             except Exception as e:  # noqa: BLE001 - every failure answers in the envelope
                 return 500, error_body(500, "internal", f"{type(e).__name__}: {e}")
+    if served:
+        return 405, error_body(405, "method_not_allowed", f"{method.upper()} is not allowed on {path}")
     return 404, error_body(404, "not_found", f"no route {method.upper()} {path}")

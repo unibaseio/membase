@@ -76,7 +76,7 @@ class FakeMembase:
                     }
                 ]
             return httpx.Response(200, json=out)
-        if path == "/v1/memories" and request.method == "POST":
+        if path == "/v1/memories/add" and request.method == "POST":
             if key in self.read_only_keys:
                 return _error(
                     403,

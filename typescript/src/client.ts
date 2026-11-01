@@ -88,10 +88,10 @@ export class Membase {
     get: (memoryId: string): Promise<Memory> => this.request("GET", item("memories", memoryId)),
     /** Save one fact into this key's write target; the receipt is the note it was written as. */
     add: (params: { content: string; title?: string }): Promise<Receipt> =>
-      this.request("POST", "/v1/memories", { body: { content: params.content, title: params.title ?? "" } }),
+      this.request("POST", "/v1/memories/add", { body: { content: params.content, title: params.title ?? "" } }),
     /** Forget one learned fact. Needs Full access and `confirm: true`; otherwise `ConfirmationRequiredError` (428) and nothing changes. */
     forget: (memoryId: string, params: { confirm?: boolean } = {}): Promise<Removed> =>
-      this.request("DELETE", item("memories", memoryId), { query: { confirm: flag(params.confirm) } }),
+      this.request("POST", `${item("memories", memoryId)}/forget`, { query: { confirm: flag(params.confirm) } }),
   };
 
   /** The material handed in (`doc_…`): files and pages, and the notes facts were written as. */
@@ -103,12 +103,12 @@ export class Membase {
     get: (documentId: string): Promise<Document> => this.request("GET", item("documents", documentId)),
     /** Hand in a document (its text, or a public `url`) to this key's write target. */
     add: (params: AddParams): Promise<Receipt> =>
-      this.request("POST", "/v1/documents", {
+      this.request("POST", "/v1/documents/add", {
         body: { content: params.content, url: params.url, title: params.title ?? "", custom_id: params.customId ?? "" },
       }),
     /** Withdraw a document and what was learned from it. Needs Full access and `confirm: true`; otherwise `ConfirmationRequiredError` (428). */
     delete: (documentId: string, params: { confirm?: boolean } = {}): Promise<Removed> =>
-      this.request("DELETE", item("documents", documentId), { query: { confirm: flag(params.confirm) } }),
+      this.request("POST", `${item("documents", documentId)}/delete`, { query: { confirm: flag(params.confirm) } }),
   };
 
   /** Photos and videos (`med_…`) in the media Memories in reach. */
@@ -123,7 +123,7 @@ export class Membase {
       this.request("POST", "/v1/media/search", { body: { q: params.q, kind: params.kind, limit: params.limit } }),
     /** Forget one item and remove its file. Needs Full access and `confirm: true`; otherwise `ConfirmationRequiredError` (428). */
     delete: (mediaId: string, params: { confirm?: boolean } = {}): Promise<Removed> =>
-      this.request("DELETE", item("media", mediaId), { query: { confirm: flag(params.confirm) } }),
+      this.request("POST", `${item("media", mediaId)}/delete`, { query: { confirm: flag(params.confirm) } }),
   };
 
   constructor(opts: MembaseOptions = {}) {

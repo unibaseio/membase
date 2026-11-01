@@ -65,7 +65,7 @@ class FakeMembase:
             return httpx.Response(200, json={"items": self.results, "partial": self.partial})
         if path == "/v1/profile":
             return httpx.Response(200, json=self.profile)
-        if path == "/v1/memories" and request.method == "POST":
+        if path == "/v1/memories/add" and request.method == "POST":
             if extra := set(body) - {"content", "title"}:
                 return _error(422, "validation", f"unknown fields: {sorted(extra)}")
             if self.write_target is None:

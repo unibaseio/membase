@@ -239,7 +239,7 @@ def test_save_tool_writes_a_note_to_the_write_target(manager, fake):
     out = tool(mgr, "membase_save", content="We moved the ledger launch to March.")
     assert out["saved"] is True and out["status"] == "processing" and out["id"] == "doc_bm90ZQ"
     assert out["memory"] == "Project decisions"
-    body = fake.body(fake.calls("POST", "/v1/memories")[0])
+    body = fake.body(fake.calls("POST", "/v1/memories/add")[0])
     assert body == {"content": "We moved the ledger launch to March.", "title": ""}
 
 
@@ -255,11 +255,11 @@ def test_built_in_memory_writes_are_not_mirrored(manager, fake):
     """The memory API has no standing-fact write, so what the built-in tool keeps stays Hermes's own."""
     mgr, _ = manager()
     mgr.on_memory_write("add", "user", "Favourite city: Lisbon.")
-    assert fake.calls("POST", "/v1/memories") == []
+    assert fake.calls("POST", "/v1/memories/add") == []
 
 
 def test_save_with_a_read_only_key_is_refused_clearly(manager, fake):
-    fake.fail["/v1/memories"] = lambda r: fake.error(
+    fake.fail["/v1/memories/add"] = lambda r: fake.error(
         403, "tool 'add_memory' is not in this agent's capability profile")
     mgr, _ = manager()
     err = tool(mgr, "membase_save", content="x")["error"]
@@ -295,7 +295,7 @@ def test_turns_are_not_captured_by_default(manager, fake):
     mgr, _ = manager()
     mgr.sync_all("my passport expires in May", "Noted.", session_id="s-1")
     assert mgr.flush_pending(5)
-    assert fake.calls("POST", "/v1/memories") == []
+    assert fake.calls("POST", "/v1/memories/add") == []
 
 
 def test_capture_is_opt_in(manager, fake, home):
@@ -305,7 +305,7 @@ def test_capture_is_opt_in(manager, fake, home):
     assert mgr.flush_pending(5)
     mgr.sync_all("I prefer aisle seats on long flights", "Got it.", session_id="s-1")
     assert mgr.flush_pending(5)
-    writes = fake.calls("POST", "/v1/memories")
+    writes = fake.calls("POST", "/v1/memories/add")
     assert len(writes) == 2  # once per turn
     bodies = [fake.body(w) for w in writes]
     assert [b["content"] for b in bodies] == ["my passport expires in May", "I prefer aisle seats on long flights"]
@@ -321,7 +321,7 @@ def test_capture_skips_unattended_runs(manager, fake, home, context):
     mgr, _ = manager(agent_context=context)
     mgr.sync_all("a scheduled report", "done", session_id="s-1")
     assert mgr.flush_pending(5)
-    assert fake.calls("POST", "/v1/memories") == []
+    assert fake.calls("POST", "/v1/memories/add") == []
 
 
 def test_capture_failure_is_logged_not_raised(manager, fake, home, caplog):

@@ -120,7 +120,7 @@ def test_membase_save_tool_writes_to_the_write_target(fake, client):
     agent = make_agent(MembaseMemoryStore(client=client), model, injection=False)
     agent("Remember: we moved the launch to May.")
 
-    assert fake.calls("/v1/memories") == [{"content": "We moved the launch to May.", "title": ""}]
+    assert fake.calls("/v1/memories/add") == [{"content": "We moved the launch to May.", "title": ""}]
     result = tool_result_text(model.seen[1])
     assert "Saved to Membase in Project decisions" in result and "doc_bm90ZQ" in result
     spec = next(t for t in agent.tool_registry.get_all_tool_specs() if t["name"] == "membase_save")
@@ -178,7 +178,7 @@ def test_capture_is_off_by_default(fake, client):
 
     model = ScriptedModel([text("Sure.")])
     make_agent(store, model)("My cat is called Miso.")
-    assert fake.calls("/v1/memories") == []
+    assert fake.calls("/v1/memories/add") == []
 
 
 async def test_direct_write_without_capture_is_refused(client):
@@ -195,7 +195,7 @@ def test_capture_with_extraction_saves_the_users_words(fake, client):
     make_agent(store, model, injection=False)("We decided on Postgres for the ledger.")
 
     # The sync Agent call flushes extraction at the end of the invocation.
-    assert fake.calls("/v1/memories") == [
+    assert fake.calls("/v1/memories/add") == [
         {"content": "We decided on Postgres for the ledger.", "title": "Conversation with a Strands agent"}
     ]
 
@@ -205,7 +205,7 @@ def test_capture_enables_the_managers_add_memory_tool(fake, client):
     model = ScriptedModel([tool_use("add_memory", {"entries": ["Launch moved to May."]}), text("Saved.")])
     make_agent(store, model, injection=False, add_tool_config=True)("Remember the launch moved to May.")
 
-    assert fake.calls("/v1/memories") == [{"content": "Launch moved to May.", "title": ""}]
+    assert fake.calls("/v1/memories/add") == [{"content": "Launch moved to May.", "title": ""}]
 
 
 async def test_captured_write_with_revoked_key_raises_for_the_manager(fake, client):

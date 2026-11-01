@@ -92,7 +92,7 @@ ROUTES: list[tuple[str, re.Pattern, Callable[..., Any], int]] = [
     ("POST", re.compile(r"^/v1/media/search$"), _search, 200),
     ("POST", re.compile(r"^/v1/media/ask$"), _ask, 200),
     ("GET", re.compile(r"^/v1/media/(?P<id>[^/]+)$"), _get, 200),
-    ("DELETE", re.compile(r"^/v1/media/(?P<id>[^/]+)$"), _delete, 200),
+    ("POST", re.compile(r"^/v1/media/(?P<id>[^/]+)/delete$"), _delete, 200),
     ("GET", re.compile(r"^/v1/media/(?P<id>[^/]+)/file$"), _file, 200),
     ("GET", re.compile(r"^/v1/media/(?P<id>[^/]+)/thumbs/(?P<thumb>.+)$"), _file, 200),
 ]

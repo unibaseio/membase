@@ -43,7 +43,7 @@ class Media:
         """Forget one item and remove its file. Needs Full access and ``confirm=True``; without it
         nothing changes and :class:`~membase.ConfirmationRequiredError` is raised."""
         return self._c._request(
-            "DELETE", f"/v1/media/{quote(media_id, safe='')}", params={"confirm": "true" if confirm else "false"}
+            "POST", f"/v1/media/{quote(media_id, safe='')}/delete", params={"confirm": "true" if confirm else "false"}
         )
 
     def add(

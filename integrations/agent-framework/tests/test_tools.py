@@ -47,7 +47,7 @@ async def test_search_reports_memories_that_could_not_answer(mem):
 
 async def test_save_lands_in_the_write_target(mem):
     _, (out,) = await _run(mem, [call("membase_save", {"content": "I take the window seat"})])
-    (saved,) = mem.calls("/v1/memories")
+    (saved,) = mem.calls("/v1/memories/add")
     assert saved["json"] == {"content": "I take the window seat", "title": ""}
     assert saved["params"] == {}  # never confirm=
     assert 'Saved to Membase "Travel"' in out
@@ -61,7 +61,7 @@ async def test_save_without_a_write_target_says_how_to_fix_it(mem):
 
 
 async def test_save_with_a_read_key_explains_the_refusal(mem):
-    mem.status["/v1/memories"] = 403
+    mem.status["/v1/memories/add"] = 403
     _, (out,) = await _run(mem, [call("membase_save", {"content": "x"})])
     assert "narrowed or revoked" in out and "Read key cannot write" in out
 
@@ -108,4 +108,4 @@ async def test_provider_and_tools_together(mem):
     result = await agent.run("remember: we ship on Fridays")
     assert result.text == "Saved."
     assert "[Project decisions]" in str(chat.seen[0]["options"]["instructions"])
-    assert mem.calls("/v1/memories")[0]["json"]["content"] == "Ship on Fridays"
+    assert mem.calls("/v1/memories/add")[0]["json"]["content"] == "Ship on Fridays"

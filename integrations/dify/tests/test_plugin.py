@@ -311,20 +311,20 @@ RECEIPT = {
 
 
 def test_save_to_the_write_target(executor, membase):
-    membase.on("POST", "/v1/memories", (202, RECEIPT))
+    membase.on("POST", "/v1/memories/add", (202, RECEIPT))
     text, data = invoke(executor, "save_memory", {"content": "We settled on Postgres."})
-    (call,) = membase.calls("POST", "/v1/memories")
+    (call,) = membase.calls("POST", "/v1/memories/add")
     assert body(call) == {"content": "We settled on Postgres.", "title": ""}
     assert "Saved to Project decisions (status: processing)" in text
     assert data == RECEIPT
 
 
 def test_save_ignores_retired_parameters(executor, membase):
-    membase.on("POST", "/v1/memories", (202, RECEIPT))
+    membase.on("POST", "/v1/memories/add", (202, RECEIPT))
     invoke(
         executor, "save_memory", {"content": "Dark mode.", "container": "Travel", "static": True}
     )
-    assert body(membase.calls("POST", "/v1/memories")[0]) == {"content": "Dark mode.", "title": ""}
+    assert body(membase.calls("POST", "/v1/memories/add")[0]) == {"content": "Dark mode.", "title": ""}
 
 
 def test_save_without_a_write_target_says_nothing_was_saved(executor, membase):
@@ -332,7 +332,7 @@ def test_save_without_a_write_target_says_nothing_was_saved(executor, membase):
 
     membase.on(
         "POST",
-        "/v1/memories",
+        "/v1/memories/add",
         (
             422,
             {
@@ -348,7 +348,7 @@ def test_save_without_a_write_target_says_nothing_was_saved(executor, membase):
     message = str(err.value)
     assert "several Memories and has no write target, so nothing was saved" in message
     assert "Developer keys" in message
-    assert len(membase.calls("POST", "/v1/memories")) == 1
+    assert len(membase.calls("POST", "/v1/memories/add")) == 1
 
 
 def test_save_with_a_read_only_key_is_refused(executor, membase):
@@ -356,7 +356,7 @@ def test_save_with_a_read_only_key_is_refused(executor, membase):
 
     membase.on(
         "POST",
-        "/v1/memories",
+        "/v1/memories/add",
         (
             403,
             {
@@ -370,7 +370,7 @@ def test_save_with_a_read_only_key_is_refused(executor, membase):
     with pytest.raises(MembaseToolError) as err:
         invoke(executor, "save_memory", {"content": "x"})
     assert "Read key cannot save" in str(err.value)
-    assert len(membase.calls("POST", "/v1/memories")) == 1
+    assert len(membase.calls("POST", "/v1/memories/add")) == 1
 
 
 def test_save_requires_content(executor, membase):
