@@ -10,7 +10,7 @@ from typing import Any
 
 from ._version import __version__
 from .client import Membase
-from .errors import MembaseError
+from .errors import ConfirmationRequiredError, MembaseError
 from .media import cli as media_cli
 
 
@@ -62,12 +62,11 @@ def _cmd_import(args: argparse.Namespace, m: Membase) -> Any:
     transport = m._http._transport  # noqa: SLF001 - the local transport, when local
     backend = getattr(transport, "backend", None)
     if backend is not None:
-        return backend.import_sessions(sessions, args.container)
+        return backend.import_sessions(sessions, backend.write_target())
     out = []
     for s in sessions:
         text = "\n".join(f"{t['role']}: {t['content']}" for t in s["turns"])
-        out.append(m.add(text, container=args.container, title=s["session_id"],
-                         custom_id=f"session:{s['session_id']}"))
+        out.append(m.add(text, title=s["session_id"], custom_id=f"session:{s['session_id']}"))
     return {"sessions": len(out), "documents": out}
 
 
@@ -85,14 +84,16 @@ def _cmd_agent(args: argparse.Namespace, m: Membase) -> Any:
     backend = getattr(m._http._transport, "backend", None)  # noqa: SLF001
     if backend is None:
         raise SystemExit("agent memory is local: use membase --local agent ...")
+    # An agent's cases and skills live in the store's write target, like everything else it writes.
+    target = backend.write_target()
     if args.agent_cmd == "ingest":
         messages, meta = _load_trace(args.trace)
         session = args.session or meta.get("session_id") or (Path(args.trace).stem if args.trace != "-" else None)
-        return backend.agent_ingest(messages, agent_id=args.agent, session_id=session, container=args.container)
+        return backend.agent_ingest(messages, agent_id=args.agent, session_id=session, container=target)
     if args.agent_cmd == "search":
         return backend.agent_search(args.q, agent_id=args.agent, kind=args.kind, limit=args.limit,
-                                    container=args.container)
-    return backend.agent_skills(args.agent, container=args.container)
+                                    container=target)
+    return backend.agent_skills(args.agent, container=target)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -106,40 +107,45 @@ def _parser() -> argparse.ArgumentParser:
     p.add_argument("--base-url", default=None, help="hosted API base URL (default MEMBASE_BASE_URL)")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("containers", help="list the containers in reach")
-
     s = sub.add_parser("search", help="search memory")
     s.add_argument("q")
-    s.add_argument("--container", help="one container id (default: every container in reach)")
     s.add_argument("--limit", type=int, help="passages in all, 1-50")
+    s.add_argument("--mode", choices=("full", "fast"), default="full",
+                   help="fast: one round of retrieval, no model call")
 
     a = sub.add_parser("add", help="remember one fact or a short exchange")
     a.add_argument("content")
-    a.add_argument("--container", help="container id (may be omitted when one is in reach)")
-    a.add_argument("--static", action="store_true", help="a standing fact about the user (profile)")
     a.add_argument("--title", default="")
+
+    mm = sub.add_parser("memories", help="the facts memory learned: list / get")
+    msub = mm.add_subparsers(dest="mem_cmd", required=True)
+    ml = msub.add_parser("list", help="the newest facts")
+    ml.add_argument("--limit", type=int, help="1-1000 (default 100)")
+    mg = msub.add_parser("get", help="one fact by its mem_ id")
+    mg.add_argument("memory_id")
 
     d = sub.add_parser("documents", help="documents: add / list / get / delete")
     dsub = d.add_subparsers(dest="doc_cmd", required=True)
-    da = dsub.add_parser("add", help="give a container raw material: a file, --url or --text")
+    da = dsub.add_parser("add", help="hand in raw material: a file, --url or --text")
     da.add_argument("path", nargs="?")
     da.add_argument("--url", help="a public web address to fetch")
     da.add_argument("--text", help="the document's text")
-    da.add_argument("--container", default=None, help="container id (default: default)")
     da.add_argument("--title", default="")
     da.add_argument("--custom-id", default="", help="your own id; the same id again is a no-op")
     dl = dsub.add_parser("list", help="documents, newest first")
-    dl.add_argument("--container")
-    dg = dsub.add_parser("get", help="one document, with whether it is learned")
+    dl.add_argument("--kind", choices=("file", "note"))
+    dl.add_argument("--limit", type=int, help="1-1000 (default 100)")
+    dg = dsub.add_parser("get", help="one document, with how far its learning got")
     dg.add_argument("document_id")
     dd = dsub.add_parser("delete", help="remove a document")
     dd.add_argument("document_id")
-    dd.add_argument("--confirm", action="store_true", help="remove it; without this, only show what would go")
+    dd.add_argument("--confirm", action="store_true",
+                    help="remove it; without this nothing is removed and the answer names what would be")
 
-    f = sub.add_parser("forget", help="forget one memory by id")
+    f = sub.add_parser("forget", help="forget one memory by its mem_ id")
     f.add_argument("memory_id")
-    f.add_argument("--container")
-    f.add_argument("--confirm", action="store_true", help="forget it; without this, only show what would go")
+    f.add_argument("--confirm", action="store_true",
+                   help="forget it; without this nothing is forgotten and the answer names what would be")
 
     pr = sub.add_parser("profile", help="who the user is")
     pr.add_argument("q", nargs="?")
@@ -147,9 +153,10 @@ def _parser() -> argparse.ArgumentParser:
     k = sub.add_parser("ask", help="an answer composed from memory")
     k.add_argument("message")
 
+    sub.add_parser("capabilities", help="what this key may do, and the Memories it reaches")
+
     i = sub.add_parser("import", help="import chat exports (Claude, ChatGPT, markdown, JSON); directories are scanned")
     i.add_argument("files", nargs="+")
-    i.add_argument("--container")
     i.add_argument("--dry-run", action="store_true", help="only report what would be imported")
 
     g = sub.add_parser("agent", help="agent memory (local): traces to cases and skills")
@@ -158,16 +165,13 @@ def _parser() -> argparse.ArgumentParser:
     gi.add_argument("trace")
     gi.add_argument("--agent", required=True, help="the agent's id (owner of its cases and skills)")
     gi.add_argument("--session", default=None)
-    gi.add_argument("--container")
     gs = gsub.add_parser("search", help="search an agent's cases and skills")
     gs.add_argument("q")
     gs.add_argument("--agent", required=True)
     gs.add_argument("--kind", choices=("cases", "skills", "both"), default="both")
     gs.add_argument("--limit", type=int, default=10)
-    gs.add_argument("--container")
     gk = gsub.add_parser("skills", help="list an agent's skills")
     gk.add_argument("--agent", required=True)
-    gk.add_argument("--container")
 
     media_cli.add_parser(sub)
 
@@ -201,12 +205,12 @@ def main(argv: list[str] | None = None) -> int:
 
             run(m, transport=args.transport, host=args.host, port=args.port)
             return 0
-        if args.cmd == "containers":
-            out = m.containers.list()
-        elif args.cmd == "search":
-            out = m.search(args.q, container=args.container, limit=args.limit)
+        if args.cmd == "search":
+            out = m.search(args.q, limit=args.limit, mode=args.mode)
         elif args.cmd == "add":
-            out = m.memories.add(args.content, container=args.container, static=args.static, title=args.title)
+            out = m.memories.add(args.content, title=args.title)
+        elif args.cmd == "memories":
+            out = m.memories.list(limit=args.limit) if args.mem_cmd == "list" else m.memories.get(args.memory_id)
         elif args.cmd == "documents":
             if args.doc_cmd == "add":
                 if args.path:
@@ -216,20 +220,21 @@ def main(argv: list[str] | None = None) -> int:
                     content, title = args.text, args.title
                 if (content is None) == (args.url is None):
                     raise SystemExit("documents add needs exactly one of PATH, --text or --url")
-                out = m.add(content, container=args.container or "default", url=args.url,
-                            title=title, custom_id=args.custom_id)
+                out = m.add(content, url=args.url, title=title, custom_id=args.custom_id)
             elif args.doc_cmd == "list":
-                out = m.documents.list(container=args.container)
+                out = m.documents.list(kind=args.kind, limit=args.limit)
             elif args.doc_cmd == "get":
                 out = m.documents.get(args.document_id)
             else:
                 out = m.documents.delete(args.document_id, confirm=args.confirm)
         elif args.cmd == "forget":
-            out = m.memories.forget(args.memory_id, container=args.container, confirm=args.confirm)
+            out = m.memories.forget(args.memory_id, confirm=args.confirm)
         elif args.cmd == "profile":
             out = m.profile(args.q)
         elif args.cmd == "ask":
             out = m.ask(args.message)
+        elif args.cmd == "capabilities":
+            out = m.capabilities()
         elif args.cmd == "agent":
             out = _cmd_agent(args, m)
         elif args.cmd == "media":
@@ -239,6 +244,11 @@ def main(argv: list[str] | None = None) -> int:
         _print(out)
         m.close()
         return 0
+    except ConfirmationRequiredError as e:
+        # Nothing was removed: show what would be, from the API's own answer.
+        _print(e.body)
+        print(f"error: {e}", file=sys.stderr)
+        return 1
     except MembaseError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

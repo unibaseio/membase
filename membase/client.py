@@ -6,6 +6,7 @@ import os
 import random
 import time
 from typing import Any
+from urllib.parse import quote
 
 import httpx
 
@@ -52,7 +53,6 @@ class Membase:
                 transport=LocalTransport(None if local is True else local),
                 timeout=None,
             )
-            self.containers = _Containers(self)
             self.documents = _Documents(self)
             self.memories = _Memories(self)
             self.media = Media(self)
@@ -70,37 +70,28 @@ class Membase:
         self.max_retries = max(0, int(max_retries))
         self._owns_http = http_client is None
         self._http = http_client or httpx.Client(base_url=self.base_url, timeout=timeout)
-        self.containers = _Containers(self)
         self.documents = _Documents(self)
         self.memories = _Memories(self)
         self.media = Media(self)
-
 
     def add(
         self,
         content: str | None = None,
         *,
-        container: str,
         url: str | None = None,
         title: str = "",
-        metadata: dict | None = None,
         custom_id: str = "",
     ) -> dict:
-        """Hand a document (its text, or a public ``url`` to fetch) to a container."""
-        body: dict[str, Any] = {"container": container, "title": title, "custom_id": custom_id}
-        if content is not None:
-            body["content"] = content
-        if url is not None:
-            body["url"] = url
-        if metadata is not None:
-            body["metadata"] = metadata
-        return self._request("POST", "/v1/documents", json=body)
+        """Hand in a document (its text, or a public ``url`` to fetch); the same as
+        ``documents.add``."""
+        return self.documents.add(content, url=url, title=title, custom_id=custom_id)
 
-    def search(self, q: str, *, container: str | None = None, limit: int | None = None) -> dict:
-        """Passages the containers hold on ``q``, most relevant first, each naming its container."""
-        body: dict[str, Any] = {"q": q}
-        if container is not None:
-            body["container"] = container
+    def search(self, q: str, *, limit: int | None = None, mode: str = "full") -> dict:
+        """The passages the Memories in reach hold on ``q``, most relevant first: ``items`` (each
+        a ``memory`` with its ``mem_`` id, or a ``document`` passage, naming its ``memory_name``)
+        and ``partial`` (the Memories that could not answer). ``limit`` is how many in all (1-50);
+        ``mode="fast"`` is one round of retrieval with no model call."""
+        body: dict[str, Any] = {"q": q, "mode": mode}
         if limit is not None:
             body["limit"] = limit
         return self._request("POST", "/v1/search", json=body)
@@ -120,6 +111,10 @@ class Membase:
         """The user's standing rules for how their memory is used by this credential."""
         return self._request("GET", "/v1/rules")
 
+    def capabilities(self) -> dict:
+        """What this key may do: ``actions`` (``search``, ``memories.add``, …) and the Memories it
+        reaches, by name and kind. Not permission: every call is still checked when made."""
+        return self._request("GET", "/v1/capabilities")
 
     def close(self) -> None:
         if self._owns_http:
@@ -184,62 +179,81 @@ def _backoff(attempt: int, retry_after: str | None = None) -> float:
     return min(0.5 * (2 ** (attempt - 1)), 8.0) * (0.5 + random.random())
 
 
-class _Containers:
-    def __init__(self, client: Membase) -> None:
-        self._c = client
-
-    def list(self) -> dict:
-        """The containers this key may use — every one, for the account's owner."""
-        return self._c._request("GET", "/v1/containers")
+def _limit(limit: int | None, **extra: Any) -> dict | None:
+    params = {k: v for k, v in extra.items() if v is not None}
+    if limit is not None:
+        params["limit"] = limit
+    return params or None
 
 
-class _Documents:
-    def __init__(self, client: Membase) -> None:
-        self._c = client
-
-    def list(self, *, container: str | None = None) -> dict:
-        """The documents the containers in reach have read, newest first, each with ``learned``."""
-        return self._c._request(
-            "GET", "/v1/documents", params={"container": container} if container else None
-        )
-
-    def get(self, document_id: str) -> dict:
-        """One document, with whether its container has learned it yet."""
-        return self._c._request("GET", f"/v1/documents/{document_id}")
-
-    def delete(self, document_id: str, *, confirm: bool = False) -> dict:
-        """Remove one document (hosted, the file goes to the Files trash); needs ``confirm=True``."""
-        return self._c._request(
-            "DELETE", f"/v1/documents/{document_id}", params={"confirm": _flag(confirm)}
-        )
+def _path(collection: str, item_id: str) -> str:
+    return f"/v1/{collection}/{quote(item_id, safe='')}"
 
 
 class _Memories:
+    """The facts the Memories in reach learned (``mem_`` ids)."""
+
     def __init__(self, client: Membase) -> None:
         self._c = client
 
+    def list(self, *, limit: int | None = None) -> dict:
+        """The newest facts (``limit`` 1-1000, default 100): ``{items, has_more, partial}``."""
+        return self._c._request("GET", "/v1/memories", params=_limit(limit))
+
+    def get(self, memory_id: str) -> dict:
+        """One fact, at any age."""
+        return self._c._request("GET", _path("memories", memory_id))
+
+    def add(self, content: str, *, title: str = "") -> dict:
+        """Save one fact into this key's write target. The receipt is the note it was written as:
+        ``{id: "doc_…", kind: "note", status, learning}``."""
+        return self._c._request("POST", "/v1/memories", json={"content": content, "title": title})
+
+    def forget(self, memory_id: str, *, confirm: bool = False) -> dict:
+        """Forget one learned fact (the material it came from stays). Needs Full access and
+        ``confirm=True``; without it nothing changes and :class:`ConfirmationRequiredError` is
+        raised."""
+        return self._c._request("DELETE", _path("memories", memory_id), params={"confirm": _flag(confirm)})
+
+
+class _Documents:
+    """The material handed in (``doc_`` ids): files and pages (``kind="file"``) and the notes facts
+    were written as (``kind="note"``)."""
+
+    def __init__(self, client: Membase) -> None:
+        self._c = client
+
+    def list(self, *, kind: str | None = None, limit: int | None = None) -> dict:
+        """The documents, newest first (``limit`` 1-1000, default 100): ``{items, has_more, partial}``."""
+        return self._c._request("GET", "/v1/documents", params=_limit(limit, kind=kind))
+
+    def get(self, document_id: str) -> dict:
+        """One document, with ``learning``: how far each Memory got in learning it."""
+        return self._c._request("GET", _path("documents", document_id))
+
     def add(
         self,
-        content: str,
+        content: str | None = None,
         *,
-        container: str | None = None,
-        static: bool = False,
+        url: str | None = None,
         title: str = "",
+        custom_id: str = "",
     ) -> dict:
-        """Save one fact; ``static=True`` records a standing fact in the user's profile."""
-        body: dict[str, Any] = {"content": content, "static": static, "title": title}
-        if container is not None:
-            body["container"] = container
-        return self._c._request("POST", "/v1/memories", json=body)
+        """Hand in a document (its text, or a public ``url`` to fetch) to this key's write target.
+        The same ``custom_id`` again is a no-op. The receipt is ``{id: "doc_…", kind: "file",
+        status, learning}``."""
+        body: dict[str, Any] = {"title": title, "custom_id": custom_id}
+        if content is not None:
+            body["content"] = content
+        if url is not None:
+            body["url"] = url
+        return self._c._request("POST", "/v1/documents", json=body)
 
-    def forget(
-        self, memory_id: str, *, container: str | None = None, confirm: bool = False
-    ) -> dict:
-        """Forget one learned fact; needs ``confirm=True``."""
-        params: dict[str, Any] = {"confirm": _flag(confirm)}
-        if container is not None:
-            params["container"] = container
-        return self._c._request("DELETE", f"/v1/memories/{memory_id}", params=params)
+    def delete(self, document_id: str, *, confirm: bool = False) -> dict:
+        """Withdraw a document and what every Memory learned from it (hosted, the file goes to
+        the Files trash). Needs Full access and ``confirm=True``; without it nothing changes and
+        :class:`ConfirmationRequiredError` is raised."""
+        return self._c._request("DELETE", _path("documents", document_id), params={"confirm": _flag(confirm)})
 
 
 def _flag(v: bool) -> str:

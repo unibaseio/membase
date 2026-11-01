@@ -59,6 +59,38 @@ def test_agent_commands(tmp_path, capsys, monkeypatch):
     assert json.loads(capsys.readouterr().out)["skills"][0]["id"] == "coder_Deploy_fix"
 
 
+def test_cli_speaks_the_memory_api(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv("MEMBASE_WRITE_TARGET", raising=False)
+    store = ["--store", str(tmp_path / "s")]
+    assert cli.main([*store, "memories", "list", "--limit", "5"]) == 0
+    assert json.loads(capsys.readouterr().out) == {"items": [], "has_more": False, "partial": []}
+    assert cli.main([*store, "documents", "list", "--kind", "file"]) == 0
+    assert json.loads(capsys.readouterr().out)["items"] == []
+    assert cli.main([*store, "capabilities"]) == 0
+    assert "memories.add" in json.loads(capsys.readouterr().out)["actions"]
+    for retired in (["containers"], ["search", "x", "--container", "a"], ["add", "x", "--static"]):
+        with pytest.raises(SystemExit):
+            cli.main([*store, *retired])
+        capsys.readouterr()
+
+
+def test_a_removal_without_confirm_shows_what_would_go(tmp_path, capsys, monkeypatch):
+    fake = _FakeEngine()
+    fake.episodes = lambda limit=20, owner="": [{"id": 1, "content": "Prefers tea", "created_at": "",
+                                                 "title": "", "session_date": "", "session_id": "s"}]
+    monkeypatch.setattr(LocalBackend, "engine", lambda self, cid: (fake, fake._lock))
+    from membase.local import ids
+
+    store = ["--store", str(tmp_path / "s")]
+    LocalBackend(tmp_path / "s")._create("default")
+    mid = ids.encode("memory", "default:1")
+    assert cli.main([*store, "forget", mid]) == 1
+    captured = capsys.readouterr()
+    error = json.loads(captured.out)["error"]
+    assert error["code"] == "confirmation_required" and error["details"]["content"] == "Prefers tea"
+    assert captured.err.startswith("error: ")
+
+
 def test_agent_memory_is_local_only(monkeypatch, capsys):
     monkeypatch.setenv("MEMBASE_API_KEY", "mbk_test")
     monkeypatch.delenv("MEMBASE_LOCAL", raising=False)

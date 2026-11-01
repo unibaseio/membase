@@ -52,17 +52,15 @@ def test_npm_cli_against_local_server(tmp_path):
         return subprocess.run([*base, *args], capture_output=True, text=True, timeout=300)
 
     try:
-        r = membase("documents", "add", "--text", "We picked Postgres for the ledger service.", "--custom-id", "d1")
-        assert r.returncode == 0, r.stdout + r.stderr
-        doc = json.loads(r.stdout)["document_id"]
-        r = membase("documents", "get", doc)
-        assert r.returncode == 0 and json.loads(r.stdout)["id"] == doc, r.stdout + r.stderr
-        assert json.loads(membase("documents", "list").stdout)["documents"]
-        assert "containers" in json.loads(membase("containers").stdout)
-        r = membase("documents", "delete", doc)
-        assert json.loads(r.stdout)["status"] == "confirmation_required", r.stdout
-        r = membase("documents", "get", "no-such-document")
+        r = membase("memories", "list", "--limit", "5")
+        assert r.returncode == 0 and json.loads(r.stdout) == {"items": [], "has_more": False, "partial": []}, r.stderr
+        r = membase("documents", "list", "--kind", "note")
+        assert r.returncode == 0 and json.loads(r.stdout)["items"] == [], r.stderr
+        assert "memories.add" in json.loads(membase("capabilities").stdout)["actions"]
+        r = membase("documents", "get", "doc_missing")
         assert r.returncode == 1 and r.stderr.startswith("error: "), r.stdout + r.stderr
+        r = membase("search", "x", "--container", "default")
+        assert r.returncode == 2, r.stdout + r.stderr
         r = membase("serve")
         assert r.returncode == 2 and "unibaseio-membase[local]" in r.stderr
     finally:

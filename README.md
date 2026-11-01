@@ -32,7 +32,7 @@ know, and every AI you use reads it.
 You stop re-explaining yourself each time you switch models or tools.
 
 - **Add.** Facts, documents, web pages and chat exports from Claude or ChatGPT go into one memory.
-- **Manage.** Containers keep projects apart; search it, ask it questions, forget what should go.
+- **Manage.** Memories keep projects apart; search them, ask them questions, forget what should go.
 - **Use.** Your code, Claude Code, Cursor, Codex and ChatGPT read the same memory through the SDK or MCP.
 
 This repository is the developer side: Python and TypeScript clients, the `membase` command line
@@ -78,20 +78,28 @@ from membase import Membase
 m = Membase()                    # hosted
 # m = Membase(local=True)        # local, in ~/.membase
 
-m.memories.add("We picked Postgres for the ledger service.", container="Engineering")
-m.search("what database is the ledger on?")
-m.add("Design notes …", container="Engineering", custom_id="design-1")   # a document
+m.memories.add("We picked Postgres for the ledger service.")   # a fact
+m.search("what database is the ledger on?")                    # {"items": [...], "partial": [...]}
+m.add("Design notes …", custom_id="design-1")                   # a document
 m.ask("Which database did we choose for the ledger?")
 ```
 
+No call names a Memory: reads cover every Memory the key reaches, and writes land in its write
+target (a key that reaches several Memories and has none is refused with `WriteTargetRequiredError`).
+Ids are typed (`mem_…` a fact, `doc_…` a document, `med_…` a photo or video), lists are
+`{items, has_more, partial}`, and a removal without `confirm=True` raises `ConfirmationRequiredError`.
+Local memory answers the same routes with the same shapes.
+
 Every method, its REST route and MCP tool, and the access it needs: [SDK reference](https://docs.membase.com/build/reference/sdk-quickstart/).
+Upgrading from 0.3: see the [changelog](https://github.com/unibaseio/membase/blob/main/CHANGELOG.md).
 The Python package is `unibaseio-membase` (import `membase`); `membase` on PyPI is unrelated.
 
 ## Command line
 
 ```bash
-membase --local add "We picked Postgres for the ledger" --container Engineering
+membase --local add "We picked Postgres for the ledger"
 membase --local search "what did we pick for the ledger?"
+membase --local memories list
 membase --local ask "Which database is the ledger on?"
 membase --local import ~/Downloads/claude-export.json     # Claude, ChatGPT, markdown or JSON chats
 membase --local agent ingest trace.json --agent coder
@@ -101,8 +109,9 @@ membase --local media search "someone skiing"   # any language
 ```
 
 Without `--local` (or `--store DIR`, both before the command) commands use the hosted API; `agent`,
-`import` and `serve` need `unibaseio-membase[local]`, and `media` (local only, with its own search
-and ask) needs `unibaseio-membase[media]`: see [Media memory](docs/reference.md#media-memory).
+`import` and `serve` need `unibaseio-membase[local]`, and `media add` and `media ask` (local only)
+need `unibaseio-membase[media]`: see [Media memory](docs/reference.md#media-memory). A local store
+with several Memories writes where `MEMBASE_WRITE_TARGET` names.
 
 ## MCP
 
@@ -122,7 +131,7 @@ Cursor, Codex and other clients: [Connect your AI](https://docs.membase.com/conn
 ## Docs
 
 - [SDK reference](https://docs.membase.com/build/reference/sdk-quickstart/): methods, REST routes, MCP tools, access levels
-- [Memory operations](https://docs.membase.com/build/guides/memory-operations/): containers, documents, memories, profile, ask
+- [Memory operations](https://docs.membase.com/build/guides/memory-operations/): Memories, facts, documents, media, profile, ask
 - [Authentication](https://docs.membase.com/build/reference/authentication/): keys and what each one can reach
 - [Connect your AI](https://docs.membase.com/connect/): per-client MCP setup
 - [Agent framework integrations](integrations/): LangChain, Microsoft Agent Framework, Dify, Hermes Agent, OpenClaw and Strands Agents

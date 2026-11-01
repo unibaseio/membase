@@ -25,25 +25,28 @@ def enabled(client: Membase | Callable[[], Membase]) -> bool:
 
 
 def tool_specs(client: Callable[[], Membase]) -> list[tuple[str, str, Callable[..., Any]]]:
-    def add_media(path: str | None = None, url: str | None = None, container: str | None = None,
-                  title: str = "", custom_id: str = "") -> dict:
-        return client().media.add(path, url=url, container=container, title=title, custom_id=custom_id)
+    from ..errors import ConfirmationRequiredError
 
-    def list_media(container: str | None = None) -> dict:
-        return client().media.list(container=container)
+    def add_media(path: str | None = None, url: str | None = None, title: str = "", custom_id: str = "") -> dict:
+        return client().media.add(path, url=url, title=title, custom_id=custom_id)
+
+    def list_media(limit: int | None = None) -> dict:
+        return client().media.list(limit=limit)
 
     def get_media(media_id: str) -> dict:
         return client().media.get(media_id)
 
-    def search_media(q: str, container: str | None = None, kind: str | None = None,
-                     limit: int | None = None) -> dict:
-        return client().media.search(q, container=container, kind=kind, limit=limit)
+    def search_media(q: str, kind: str | None = None, limit: int | None = None) -> dict:
+        return client().media.search(q, kind=kind, limit=limit)
 
-    def ask_media(message: str, container: str | None = None) -> dict:
-        return client().media.ask(message, container=container)
+    def ask_media(message: str) -> dict:
+        return client().media.ask(message)
 
     def delete_media(media_id: str, confirm: bool = False) -> dict:
-        return client().media.delete(media_id, confirm=confirm)
+        try:
+            return client().media.delete(media_id, confirm=confirm)
+        except ConfirmationRequiredError as e:
+            return e.body
 
     return [
         ("add_media",
@@ -58,6 +61,6 @@ def tool_specs(client: Callable[[], Membase]) -> list[tuple[str, str, Callable[.
          "moments that matched. `kind` is image, video, audio or text.", search_media),
         ("ask_media", "An answer from media memory alone, with the items it drew on.", ask_media),
         ("delete_media",
-         "Remove a media item. Without `confirm=true` this only returns what would be removed.",
-         delete_media),
+         "Remove a media item. Without `confirm=true` nothing is removed and the answer names what "
+         "would be.", delete_media),
     ]

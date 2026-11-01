@@ -15,12 +15,28 @@ methods, see the [Membase docs](https://docs.membase.com/build/reference/sdk-qui
 membase --local serve            # http://127.0.0.1:8787/v1
 ```
 
-The hosted API's agent-protocol routes, answered by the local engine: point any client's base URL
-at it. Set `MEMBASE_LOCAL_TOKEN` to require it as a bearer token.
+The hosted memory API's routes, answered by the local engine with the same requests, answers and
+refusals: point any client's base URL at it. Set `MEMBASE_LOCAL_TOKEN` to require it as a bearer
+token.
+
+- Reads cover every Memory (container) in the store. Writes land in its write target: the one
+  `MEMBASE_WRITE_TARGET` names (made if missing), else the store's only Memory, else a new
+  `default` one. A store with several Memories and no `MEMBASE_WRITE_TARGET` refuses a write with
+  `422 write_target_required`, as the hosted API refuses a key that reaches several.
+- Ids are typed (`mem_…`, `doc_…`, `med_…`); lists are `{items, has_more, partial}`; unknown
+  fields (a `container`, say) are a `422`; a removal without `confirm=true` is a `428`.
+- The engine learns before it answers, so a write's receipt and every document say
+  `status: "succeeded"`. A fact added with `POST /v1/memories` is kept as a note (a document of kind
+  `note`) whose deletion forgets what it taught, as hosted.
+- `/v1/capabilities` names every action (the media ones with the media extra installed).
+
+Where local memory differs: the profile's `static` facts are only those added with `add --static`
+before 0.4 (the memory API has no way to write one), and `/v1/ask` reads one Memory, the one whose
+facts match best.
 
 ## Local settings
 
-Stores: `~/.membase/memory.db` (default container), `~/.membase/containers/<id>/` (others),
+Stores: `~/.membase/memory.db` (the `default` Memory), `~/.membase/containers/<id>/` (others),
 `~/.membase/profile/` (static facts). Settings come from the environment, or from a `.env` file in
 the current directory or a parent.
 
@@ -38,14 +54,16 @@ the current directory or a parent.
 | `MEMBASE_AGENT_MODEL` | `gpt-4o-mini` | agent traces |
 | `MEMBASE_LANG` | `en` | `zh` for Chinese extraction prompts |
 
-`MEMBASE_LOCAL=1` makes local the default when `MEMBASE_API_KEY` is not set.
+`MEMBASE_LOCAL=1` makes local the default when `MEMBASE_API_KEY` is not set. `MEMBASE_WRITE_TARGET`
+names the Memory writes go to (see above).
 
 ## Media memory
 
 `pip install 'unibaseio-membase[media]'` adds photos, videos and audio recordings, kept apart from
 documents and memories: they have their own routes, search and ask, and `/v1/search` and `/v1/ask`
-do not read them. Local only for now (in process, or `membase serve`). It needs only a model
-provider key: no local model is downloaded.
+do not read them. Listing, reading, searching and deleting are the hosted media routes; storing a
+file and asking are local only (in process, or `membase serve`). It needs only a model provider
+key: no local model is downloaded.
 
 An image becomes a caption. A video is cut into shots (caption, time span, thumbnail each) and its
 sound track into speaker turns matched to the person on screen; an audio file into speaker turns.
@@ -53,16 +71,20 @@ Search runs in any language over captions and speech.
 
 | Route | Python | MCP tool | Command line |
 |---|---|---|---|
-| `POST /v1/media` `{path \| url, container?, title?, custom_id?}` | `m.media.add(path, url=, container=)` | `add_media` | `media add FILE \| --url` |
-| `GET /v1/media?container=` | `m.media.list()` | `list_media` | `media list` |
+| `POST /v1/media` `{path \| url, title?, custom_id?}` (local only) | `m.media.add(path, url=)` | `add_media` | `media add FILE \| --url` |
+| `GET /v1/media?limit=` | `m.media.list()` | `list_media` | `media list` |
 | `GET /v1/media/{id}` | `m.media.get(id)` | `get_media` | `media get ID` |
 | `DELETE /v1/media/{id}?confirm=` | `m.media.delete(id, confirm=)` | `delete_media` | `media delete ID [--confirm]` |
-| `POST /v1/media/search` `{q, container?, kind?, limit?}` | `m.media.search(q, kind=)` | `search_media` | `media search Q [--kind]` |
-| `POST /v1/media/ask` `{message, container?}` | `m.media.ask(message)` | `ask_media` | `media ask MESSAGE` |
+| `POST /v1/media/search` `{q, kind?, limit?}` | `m.media.search(q, kind=)` | `search_media` | `media search Q [--kind]` |
+| `POST /v1/media/ask` `{message}` (local only) | `m.media.ask(message)` | `ask_media` | `media ask MESSAGE` |
+| `GET /v1/media/{id}/file`, `/thumbs/{name}` | | | |
 
-`path` is a file on the machine running the engine. Items and moments report `path` and `thumb` as
-files under the container's `media/` directory. `add` returns once the item is processed, which takes
-minutes for a long video. The MCP tools appear only for local memory with the extra installed.
+`path` is a file on the machine running the engine; the item lands in the write target. Items and
+moments name their file and thumbnails as routes (`file_url`, `thumb_url`), which answer a `Range`
+with `206`. `add` returns the stored item once it is processed, which takes minutes for a long
+video. `kind` is `image` or `video` hosted; local memory also has `audio` and `text`. `ask` reads
+the Memory whose media match best. The MCP tools appear only for local memory with the extra
+installed.
 
 | Setting | Default | |
 |---|---|---|

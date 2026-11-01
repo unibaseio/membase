@@ -42,7 +42,7 @@ class APIStatusError(MembaseError):
 
 
 class BadRequestError(APIStatusError):
-    """400 — a malformed request: a missing ``q``, both ``content`` and ``url``, an ambiguous ``container``."""
+    """400 — a malformed request: an empty ``q``, both ``content`` and ``url``, a list ``limit`` outside 1-1000."""
 
 
 class AuthenticationError(APIStatusError):
@@ -50,11 +50,11 @@ class AuthenticationError(APIStatusError):
 
 
 class PermissionDeniedError(APIStatusError):
-    """403 (``code: unauthorized``) — an unknown, expired or revoked key; a container outside the key's reach; or a verb above its access level."""
+    """403 (``code: unauthorized``) — an unknown, expired or revoked key, or a verb above its access level."""
 
 
 class NotFoundError(APIStatusError):
-    """404 — an unknown document or memory id."""
+    """404 — an id that is not this key's to read: unknown, deleted, outside its reach, or of the wrong type."""
 
 
 class ConflictError(APIStatusError):
@@ -62,7 +62,20 @@ class ConflictError(APIStatusError):
 
 
 class UnprocessableEntityError(APIStatusError):
-    """422 — the account's memory cannot run a turn on this deployment (``capability_unavailable``: no agent container, no model), or a body FastAPI could not parse."""
+    """422 — a request the API cannot take (``validation``: an unknown field such as ``container``,
+    a value out of range), or the account's memory cannot run a turn on this deployment
+    (``capability_unavailable``)."""
+
+
+class WriteTargetRequiredError(UnprocessableEntityError):
+    """422 ``write_target_required`` — a write from a key that reaches several Memories and has no
+    write target. Nothing was written; the key's owner sets where its writes go (no request names
+    a Memory)."""
+
+
+class ConfirmationRequiredError(APIStatusError):
+    """428 ``confirmation_required`` — a removal without ``confirm=True``, or one this key may not
+    carry out on its own. Nothing changed; ``details`` names the target (``id``, ``verb``, …)."""
 
 
 class RateLimitError(APIStatusError):
@@ -80,7 +93,12 @@ _BY_STATUS: dict[int, type[APIStatusError]] = {
     404: NotFoundError,
     409: ConflictError,
     422: UnprocessableEntityError,
+    428: ConfirmationRequiredError,
     429: RateLimitError,
+}
+
+_BY_CODE: dict[str, type[APIStatusError]] = {
+    "write_target_required": WriteTargetRequiredError,
 }
 
 
@@ -91,5 +109,8 @@ def error_for(status: int, body: Any, fallback: str = "") -> APIStatusError:
     if not message and isinstance(body, dict) and body.get("detail"):
         message = str(body["detail"])
     message = message or fallback or f"HTTP {status}"
-    cls = _BY_STATUS.get(status) or (InternalServerError if status >= 500 else APIStatusError)
+    code = err.get("code") if isinstance(err, dict) else None
+    cls = _BY_CODE.get(str(code or "")) or _BY_STATUS.get(status) or (
+        InternalServerError if status >= 500 else APIStatusError
+    )
     return cls(message, status=status, body=body)

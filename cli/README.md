@@ -21,17 +21,20 @@
 npm install -g @unibaseio/membase-cli      # or: npx @unibaseio/membase-cli <command>
 export MEMBASE_API_KEY="mbk_…"             # Connect › Developer keys in the Membase app
 
-membase add "We picked Postgres for the ledger" --container Engineering
+membase add "We picked Postgres for the ledger"
 membase search "what did we pick for the ledger?"
 membase ask "Which database is the ledger on?"
-membase documents add notes/design.md --container Engineering
-membase documents list
+membase documents add notes/design.md
+membase documents list --kind file
+membase memories list --limit 20
+membase forget mem_… --confirm
 membase profile
 ```
 
 Every command prints JSON. `--api-key` and `--base-url` override `MEMBASE_API_KEY` and
-`MEMBASE_BASE_URL`; `membase --help` lists the commands. Exit codes: 0 done, 1 the API refused,
-2 a usage error.
+`MEMBASE_BASE_URL`; `membase --help` lists the commands. Writes land in the key's write target.
+Exit codes: 0 done, 1 the API refused (a removal without `--confirm` prints what would go and
+exits 1), 2 a usage error.
 
 The commands and flags are those of the `membase` command in the Python package
 [unibaseio-membase](https://pypi.org/project/unibaseio-membase/), which also runs memory on your

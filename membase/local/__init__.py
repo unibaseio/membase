@@ -1,4 +1,4 @@
-"""Membase on this machine: the agent protocol answered by the unibaseio-membase-core engine."""
+"""Membase on this machine: the hosted memory API answered by the unibaseio-membase-core engine."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from urllib.parse import parse_qsl
 import httpx
 
 from .backend import DEFAULT_CONTAINER, LocalBackend, LocalError
-from .routes import dispatch
+from .routes import Raw, dispatch
 
 __all__ = ["DEFAULT_CONTAINER", "LocalBackend", "LocalError", "LocalTransport", "dispatch"]
 
@@ -27,7 +27,11 @@ class LocalTransport(httpx.BaseTransport):
         body = json.loads(raw) if raw else None
         query = dict(parse_qsl(request.url.query.decode() if isinstance(request.url.query, bytes)
                                else str(request.url.query)))
-        status, payload = dispatch(self.backend, request.method, request.url.path, query, body)
+        status, payload = dispatch(self.backend, request.method, request.url.path, query, body,
+                                   dict(request.headers))
+        if isinstance(payload, Raw):
+            return httpx.Response(status, content=payload.body, request=request,
+                                  headers={"Content-Type": payload.content_type, **payload.headers})
         return httpx.Response(status, json=payload, request=request)
 
     def close(self) -> None:

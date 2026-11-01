@@ -7,6 +7,7 @@ import os
 from typing import Any, Callable
 
 from ..client import Membase
+from ..errors import ConfirmationRequiredError
 from ..media import mcp as media_mcp
 
 MEMORY_PROTOCOL = """\
@@ -18,9 +19,9 @@ authoritative record of the user's past, preferences, decisions, projects and pe
    `search_memories` (or `ask_agent` for a synthesized answer). Do not use Conversation Search
    or Web Search for this: they are not the user's memory.
 2. When the user states something durable (a decision, a preference, a personal fact, a
-   milestone, their role), call `add_memory` without being asked. `static=true` is for a
-   standing fact about the user. Skip pleasantries; the bar is "would they want this recalled
-   in six months?". Raw material (a file, a page, notes) goes to `add_document`.
+   milestone, their role), call `add_memory` without being asked. Skip pleasantries; the bar
+   is "would they want this recalled in six months?". Raw material (a file, a page, notes)
+   goes to `add_document`.
 3. If memory has nothing relevant, say so ("I don't have that in memory — want me to add
    it?"). Do not guess and do not pretend to remember.
 4. When memory conflicts with what you would otherwise say, memory wins.
@@ -29,65 +30,67 @@ authoritative record of the user's past, preferences, decisions, projects and pe
 
 def _tool_specs(client: Callable[[], Membase]) -> list[tuple[str, str, Callable[..., Any]]]:
 
-    def list_containers() -> dict:
-        return client().containers.list()
-
-    def search_memories(q: str, container: str | None = None, limit: int | None = None) -> dict:
-        return client().search(q, container=container, limit=limit)
+    def search_memories(q: str, limit: int | None = None, mode: str = "full") -> dict:
+        return client().search(q, limit=limit, mode=mode)
 
     def get_profile(q: str | None = None) -> dict:
         return client().profile(q)
 
-    def list_documents(container: str | None = None) -> dict:
-        return client().documents.list(container=container)
+    def list_documents(kind: str | None = None, limit: int | None = None) -> dict:
+        return client().documents.list(kind=kind, limit=limit)
 
     def memory_rules() -> dict:
         return client().rules()
 
-    def add_memory(content: str, container: str | None = None, static: bool = False, title: str = "") -> dict:
-        return client().memories.add(content, container=container, static=static, title=title)
+    def add_memory(content: str, title: str = "") -> dict:
+        return client().memories.add(content, title=title)
 
     def add_document(
-        container: str,
         content: str | None = None,
         url: str | None = None,
         title: str = "",
         custom_id: str = "",
     ) -> dict:
-        return client().add(content, container=container, url=url, title=title, custom_id=custom_id)
+        return client().add(content, url=url, title=title, custom_id=custom_id)
 
     def delete_document(document_id: str, confirm: bool = False) -> dict:
-        return client().documents.delete(document_id, confirm=confirm)
+        try:
+            return client().documents.delete(document_id, confirm=confirm)
+        except ConfirmationRequiredError as e:
+            return e.body
 
-    def forget_memory(memory_id: str, container: str | None = None, confirm: bool = False) -> dict:
-        return client().memories.forget(memory_id, container=container, confirm=confirm)
+    def forget_memory(memory_id: str, confirm: bool = False) -> dict:
+        try:
+            return client().memories.forget(memory_id, confirm=confirm)
+        except ConfirmationRequiredError as e:
+            return e.body
 
     def ask_agent(message: str) -> dict:
         return client().ask(message)
 
     return [
-        ("list_containers", "The memory containers you may use.", list_containers),
         ("search_memories",
-         "Passages the user's memory holds on `q`, most relevant first, each naming its container. "
-         "Omit `container` to search every container. `limit` is the total number of passages. "
-         "Retrieval, not an answer.", search_memories),
+         "Passages the user's memory holds on `q`, most relevant first, each naming the Memory it "
+         "came from (`memory_name`); a fact carries its `mem_` id. `limit` is the total number of "
+         "passages; `mode=\"fast\"` is one round with no model call. Retrieval, not an answer.",
+         search_memories),
         ("get_profile",
          "Who the user is: `static` standing facts, `dynamic` the most recently changed memories, "
          "and `results` for `q` when given.", get_profile),
-        ("list_documents", "The documents the containers have read, newest first.", list_documents),
+        ("list_documents",
+         "The material the user's memory was given, newest first; `kind` is `file` or `note`.",
+         list_documents),
         ("memory_rules", "The user's standing rules for how their memory is used.", memory_rules),
-        ("add_memory",
-         "Save one durable fact or a short exchange. `static=true` records a standing fact about "
-         "the user in their profile; otherwise it is remembered in the container.", add_memory),
+        ("add_memory", "Save one durable fact or a short exchange, in the user's words.", add_memory),
         ("add_document",
-         "Give a container raw material to learn: `content` text or a public `url`. The same "
+         "Give the user's memory raw material to learn: `content` text or a public `url`. The same "
          "`custom_id` again is a no-op.", add_document),
         ("delete_document",
-         "Remove a document. Without `confirm=true` this only returns what would be removed.",
-         delete_document),
+         "Remove a document and what was learned from it. Without `confirm=true` nothing is removed "
+         "and the answer names what would be.", delete_document),
         ("forget_memory",
-         "Forget one memory by id. Without `confirm=true` this only returns what would be forgotten.",
-         forget_memory),
+         "Forget one memory by its `mem_` id. Without `confirm=true` nothing is forgotten and the "
+         "answer names what would be.", forget_memory),
         ("ask_agent", "An answer to `message` composed from the user's memory.", ask_agent),
     ]
 

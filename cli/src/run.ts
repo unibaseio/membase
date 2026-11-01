@@ -3,14 +3,14 @@
 import { readFileSync } from "node:fs";
 import { basename, extname } from "node:path";
 import { parseArgs } from "node:util";
-import { Membase, MembaseError, type MembaseOptions } from "@unibaseio/membase";
+import { ConfirmationRequiredError, Membase, MembaseError, type MembaseOptions } from "@unibaseio/membase";
 
-export const VERSION = "0.3.4";
+export const VERSION = "0.4.0";
 
 const INSTALL_LOCAL = "pip install 'unibaseio-membase[local]'";
 const HOSTED_MCP_URL = "https://api.app.membase.com/mcp-http";
 
-type Client = Pick<Membase, "add" | "search" | "profile" | "ask" | "containers" | "documents" | "memories">;
+type Client = Pick<Membase, "add" | "search" | "profile" | "ask" | "capabilities" | "documents" | "memories" | "media">;
 
 export interface Io {
   out: (text: string) => void;
@@ -31,35 +31,54 @@ const USAGE = `usage: membase [--api-key KEY] [--base-url URL] <command> ...
 Membase — long-term memory for AI (hosted API; key from MEMBASE_API_KEY).
 
 commands:
-  containers                      list the containers in reach
-  search Q [--container ID] [--limit N]
+  search Q [--limit N] [--mode full|fast]
                                   search memory
-  add CONTENT [--container ID] [--static] [--title T]
-                                  remember one fact or a short exchange
-  documents add [PATH] [--url URL | --text TEXT] [--container ID] [--title T] [--custom-id ID]
-  documents list [--container ID]
+  add CONTENT [--title T]         remember one fact or a short exchange
+  memories list [--limit N]       the newest facts
+  memories get MEMORY_ID
+  documents add [PATH] [--url URL | --text TEXT] [--title T] [--custom-id ID]
+  documents list [--kind file|note] [--limit N]
   documents get DOCUMENT_ID
   documents delete DOCUMENT_ID [--confirm]
-  forget MEMORY_ID [--container ID] [--confirm]
-                                  forget one memory by id
+  forget MEMORY_ID [--confirm]    forget one memory by its mem_ id
+  media list [--limit N]          photos and videos
+  media get MEDIA_ID
+  media search Q [--kind image|video] [--limit N]
+  media delete MEDIA_ID [--confirm]
   profile [Q]                     who the user is
   ask MESSAGE                     an answer composed from memory
+  capabilities                    what this key may do, and the Memories it reaches
 
-Local memory (--local, --store), import, agent, serve and mcp run in the Python package:
+Writes land in the key's write target. Without --confirm a removal changes nothing and prints
+what would go (exit 1).
+
+Local memory (--local, --store), import, agent, media add/ask, serve and mcp run in the Python package:
   ${INSTALL_LOCAL}`;
 
 /** Flags each command takes, beyond the global --api-key / --base-url. */
 const FLAGS: Record<string, string[]> = {
-  containers: [],
-  search: ["container", "limit"],
-  add: ["container", "static", "title"],
-  "documents add": ["url", "text", "container", "title", "custom-id"],
-  "documents list": ["container"],
+  search: ["limit", "mode"],
+  add: ["title"],
+  "memories list": ["limit"],
+  "memories get": [],
+  "documents add": ["url", "text", "title", "custom-id"],
+  "documents list": ["kind", "limit"],
   "documents get": [],
   "documents delete": ["confirm"],
-  forget: ["container", "confirm"],
+  forget: ["confirm"],
+  "media list": ["limit"],
+  "media get": [],
+  "media search": ["kind", "limit"],
+  "media delete": ["confirm"],
   profile: [],
   ask: [],
+  capabilities: [],
+};
+
+const GROUPS: Record<string, string> = {
+  memories: "list, get",
+  documents: "add, list, get, delete",
+  media: "list, get, search, delete",
 };
 
 const PYTHON_ONLY: Record<string, string> = {
@@ -91,9 +110,9 @@ export async function main(argv: string[], io: Io = defaultIo): Promise<number> 
         store: { type: "string" },
         "api-key": { type: "string" },
         "base-url": { type: "string" },
-        container: { type: "string" },
         limit: { type: "string" },
-        static: { type: "boolean" },
+        mode: { type: "string" },
+        kind: { type: "string" },
         title: { type: "string" },
         url: { type: "string" },
         text: { type: "string" },
@@ -125,11 +144,15 @@ export async function main(argv: string[], io: Io = defaultIo): Promise<number> 
   }
 
   try {
-    const sub = cmd === "documents" ? rest.shift() : undefined;
+    if (cmd === "media" && (rest[0] === "add" || rest[0] === "ask")) {
+      io.err(`media ${rest[0]} runs on local memory: ${INSTALL_LOCAL}, then membase --local media ${rest[0]} ...`);
+      return 2;
+    }
+    const sub = cmd in GROUPS ? rest.shift() : undefined;
     const key = sub === undefined ? cmd : `${cmd} ${sub}`;
     const allowed = FLAGS[key];
     if (!allowed) {
-      throw new UsageError(cmd === "documents" ? "documents needs one of: add, list, get, delete" : `unknown command: ${cmd}`);
+      throw new UsageError(cmd in GROUPS ? `${cmd} needs one of: ${GROUPS[cmd]}` : `unknown command: ${cmd}`);
     }
     const global = new Set(["api-key", "base-url"]);
     const extra = Object.keys(v).filter((f) => !global.has(f) && !allowed.includes(f));
@@ -140,6 +163,12 @@ export async function main(argv: string[], io: Io = defaultIo): Promise<number> 
       limit = Number(v.limit);
       if (!Number.isInteger(limit)) throw new UsageError(`--limit: not an integer: ${v.limit}`);
     }
+    const choice = <T extends string>(flag: string, value: string | undefined, choices: readonly T[]): T | undefined => {
+      if (value !== undefined && !(choices as readonly string[]).includes(value)) {
+        throw new UsageError(`--${flag}: one of ${choices.join(", ")}`);
+      }
+      return value as T | undefined;
+    };
 
     let m: Client;
     try {
@@ -152,18 +181,23 @@ export async function main(argv: string[], io: Io = defaultIo): Promise<number> 
 
     let out: unknown;
     switch (key) {
-      case "containers":
-        positionals(rest, 0, 0, key);
-        out = await m.containers.list();
-        break;
       case "search": {
         const [q] = positionals(rest, 1, 1, key);
-        out = await m.search({ q, container: v.container, limit });
+        out = await m.search({ q, limit, mode: choice("mode", v.mode, ["full", "fast"] as const) });
         break;
       }
       case "add": {
         const [content] = positionals(rest, 1, 1, key);
-        out = await m.memories.add({ content, container: v.container, static: v.static ?? false, title: v.title ?? "" });
+        out = await m.memories.add({ content, title: v.title ?? "" });
+        break;
+      }
+      case "memories list":
+        positionals(rest, 0, 0, key);
+        out = await m.memories.list({ limit });
+        break;
+      case "memories get": {
+        const [id] = positionals(rest, 1, 1, key);
+        out = await m.memories.get(id);
         break;
       }
       case "documents add": {
@@ -182,12 +216,12 @@ export async function main(argv: string[], io: Io = defaultIo): Promise<number> 
         if ((content === undefined) === (v.url === undefined)) {
           throw new UsageError("documents add needs exactly one of PATH, --text or --url");
         }
-        out = await m.add({ container: v.container ?? "default", content, url: v.url, title, customId: v["custom-id"] ?? "" });
+        out = await m.add({ content, url: v.url, title, customId: v["custom-id"] ?? "" });
         break;
       }
       case "documents list":
         positionals(rest, 0, 0, key);
-        out = await m.documents.list({ container: v.container });
+        out = await m.documents.list({ kind: choice("kind", v.kind, ["file", "note"] as const), limit });
         break;
       case "documents get": {
         const [id] = positionals(rest, 1, 1, key);
@@ -201,7 +235,26 @@ export async function main(argv: string[], io: Io = defaultIo): Promise<number> 
       }
       case "forget": {
         const [id] = positionals(rest, 1, 1, key);
-        out = await m.memories.forget(id, { container: v.container, confirm: v.confirm ?? false });
+        out = await m.memories.forget(id, { confirm: v.confirm ?? false });
+        break;
+      }
+      case "media list":
+        positionals(rest, 0, 0, key);
+        out = await m.media.list({ limit });
+        break;
+      case "media get": {
+        const [id] = positionals(rest, 1, 1, key);
+        out = await m.media.get(id);
+        break;
+      }
+      case "media search": {
+        const [q] = positionals(rest, 1, 1, key);
+        out = await m.media.search({ q, kind: choice("kind", v.kind, ["image", "video"] as const), limit });
+        break;
+      }
+      case "media delete": {
+        const [id] = positionals(rest, 1, 1, key);
+        out = await m.media.delete(id, { confirm: v.confirm ?? false });
         break;
       }
       case "profile": {
@@ -214,6 +267,10 @@ export async function main(argv: string[], io: Io = defaultIo): Promise<number> 
         out = await m.ask({ message });
         break;
       }
+      case "capabilities":
+        positionals(rest, 0, 0, key);
+        out = await m.capabilities();
+        break;
     }
     io.out(JSON.stringify(out, null, 2));
     return 0;
@@ -221,6 +278,12 @@ export async function main(argv: string[], io: Io = defaultIo): Promise<number> 
     if (e instanceof UsageError) {
       io.err(`error: ${e.message}`);
       return 2;
+    }
+    if (e instanceof ConfirmationRequiredError) {
+      // Nothing was removed: show what would be, from the API's own answer.
+      io.out(JSON.stringify(e.body, null, 2));
+      io.err(`error: ${e.message}`);
+      return 1;
     }
     if (e instanceof MembaseError) {
       io.err(`error: ${e.message}`);

@@ -5,7 +5,33 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from membase import APIConnectionError, Membase, RateLimitError, UnprocessableEntityError
+import inspect
+import json
+
+from membase import (
+    APIConnectionError,
+    ConfirmationRequiredError,
+    Membase,
+    NotFoundError,
+    RateLimitError,
+    UnprocessableEntityError,
+    WriteTargetRequiredError,
+)
+
+
+def _recording(answers: list[httpx.Response] | None = None):
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return answers.pop(0) if answers else httpx.Response(200, json={})
+
+    http = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://api.example.test")
+    return Membase("mbk_test", http_client=http, max_retries=0), seen
+
+
+def _body(request: httpx.Request) -> dict | None:
+    return json.loads(request.content) if request.content else None
 
 
 def test_the_sdk_needs_a_key_and_reads_the_environment(monkeypatch):
@@ -28,7 +54,7 @@ def test_the_sdk_retries_429_and_5xx_then_raises_the_last_answer():
             headers={"Retry-After": "0"},
         ),
         httpx.Response(503, json={"error": {"code": "provider_unavailable", "message": "down"}}),
-        httpx.Response(200, json={"containers": [{"id": "mv-1", "name": "A"}]}),
+        httpx.Response(200, json={"actions": ["search"], "memories": [{"name": "A", "kind": "text"}]}),
     ]
     seen: list[httpx.Request] = []
 
@@ -38,7 +64,7 @@ def test_the_sdk_retries_429_and_5xx_then_raises_the_last_answer():
 
     http = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://api.example.test")
     c = Membase("mbk_test", http_client=http, max_retries=2)
-    assert c.containers.list()["containers"][0]["id"] == "mv-1"
+    assert c.capabilities()["actions"] == ["search"]
     assert len(seen) == 3
     assert seen[0].headers["authorization"] == "Bearer mbk_test"
     assert seen[0].headers["user-agent"].startswith("unibaseio-membase-python/")
@@ -57,7 +83,7 @@ def test_the_sdk_retries_429_and_5xx_then_raises_the_last_answer():
     ]
     c2 = Membase("mbk_test", http_client=http, max_retries=1)
     with pytest.raises(RateLimitError) as e:
-        c2.containers.list()
+        c2.capabilities()
     assert e.value.code == "rate_limited" and e.value.status == 429
 
     answers[:] = [
@@ -83,7 +109,7 @@ def test_the_sdk_turns_a_dead_connection_into_a_connection_error():
 
     http = httpx.Client(transport=httpx.MockTransport(handler), base_url="https://api.example.test")
     with pytest.raises(APIConnectionError):
-        Membase("mbk_test", http_client=http, max_retries=1).containers.list()
+        Membase("mbk_test", http_client=http, max_retries=1).capabilities()
 
 
 def test_local_is_chosen_by_argument_or_environment(monkeypatch, tmp_path):
@@ -99,3 +125,109 @@ def test_local_is_chosen_by_argument_or_environment(monkeypatch, tmp_path):
     c = Membase()
     assert c.base_url.startswith("https://")
     c.close()
+
+
+def test_the_sdk_sends_the_memory_api_shapes_and_never_a_container():
+    c, seen = _recording()
+    c.search("ledger db")
+    c.search("ledger db", limit=5, mode="fast")
+    c.memories.list()
+    c.memories.list(limit=3)
+    c.memories.get("mem_ZGVmYXVsdDox")
+    c.memories.add("We picked Postgres", title="ledger")
+    c.memories.forget("mem_ZGVmYXVsdDox")
+    c.memories.forget("mem_ZGVmYXVsdDox", confirm=True)
+    c.documents.list(kind="note", limit=10)
+    c.documents.get("doc_abc")
+    c.documents.add("Design notes", custom_id="design-1")
+    c.add(url="https://example.com/page", title="Page")
+    c.documents.delete("doc_abc", confirm=True)
+    c.media.list(limit=2)
+    c.media.get("med_abc")
+    c.media.search("someone skiing", kind="video", limit=4)
+    c.media.delete("med_abc")
+    c.profile("hours")
+    c.rules()
+    c.ask("Which database?")
+    c.capabilities()
+
+    calls = [(r.method, r.url.path, dict(r.url.params), _body(r)) for r in seen]
+    assert calls == [
+        ("POST", "/v1/search", {}, {"q": "ledger db", "mode": "full"}),
+        ("POST", "/v1/search", {}, {"q": "ledger db", "mode": "fast", "limit": 5}),
+        ("GET", "/v1/memories", {}, None),
+        ("GET", "/v1/memories", {"limit": "3"}, None),
+        ("GET", "/v1/memories/mem_ZGVmYXVsdDox", {}, None),
+        ("POST", "/v1/memories", {}, {"content": "We picked Postgres", "title": "ledger"}),
+        ("DELETE", "/v1/memories/mem_ZGVmYXVsdDox", {"confirm": "false"}, None),
+        ("DELETE", "/v1/memories/mem_ZGVmYXVsdDox", {"confirm": "true"}, None),
+        ("GET", "/v1/documents", {"kind": "note", "limit": "10"}, None),
+        ("GET", "/v1/documents/doc_abc", {}, None),
+        ("POST", "/v1/documents", {}, {"content": "Design notes", "title": "", "custom_id": "design-1"}),
+        ("POST", "/v1/documents", {}, {"url": "https://example.com/page", "title": "Page", "custom_id": ""}),
+        ("DELETE", "/v1/documents/doc_abc", {"confirm": "true"}, None),
+        ("GET", "/v1/media", {"limit": "2"}, None),
+        ("GET", "/v1/media/med_abc", {}, None),
+        ("POST", "/v1/media/search", {}, {"q": "someone skiing", "kind": "video", "limit": 4}),
+        ("DELETE", "/v1/media/med_abc", {"confirm": "false"}, None),
+        ("GET", "/v1/profile", {"q": "hours"}, None),
+        ("GET", "/v1/rules", {}, None),
+        ("POST", "/v1/ask", {}, {"message": "Which database?"}),
+        ("GET", "/v1/capabilities", {}, None),
+    ]
+    for r in seen:
+        assert "container" not in str(r.url) and b"container" not in r.content
+
+
+def test_no_method_takes_a_container():
+    c, _ = _recording()
+    methods = [c.add, c.search, c.memories.list, c.memories.add, c.memories.forget, c.documents.list,
+               c.documents.add, c.documents.delete, c.media.list, c.media.search, c.media.add, c.media.ask]
+    for method in methods:
+        assert "container" not in inspect.signature(method).parameters, method
+    assert not hasattr(c, "containers")
+    with pytest.raises(TypeError):
+        c.search("q", container="mv-1")  # type: ignore[call-arg]
+
+
+def test_answers_come_back_as_the_server_sent_them():
+    receipt = {"id": "doc_bm90ZQ", "kind": "note", "status": "processing",
+               "learning": [{"memory_name": "Life", "status": "processing"}]}
+    hits = {"items": [{"type": "memory", "id": "mem_eA", "content": "Postgres", "score": 1.0,
+                       "memory_name": "Work", "title": "ledger"}],
+            "partial": [{"memory_name": "Life", "reason": "error"}]}
+    c, _ = _recording([httpx.Response(202, json=receipt), httpx.Response(200, json=hits)])
+    assert c.memories.add("We picked Postgres") == receipt
+    assert c.search("ledger") == hits
+
+
+def test_a_removal_without_confirmation_is_a_typed_428():
+    envelope = {"error": {"code": "confirmation_required", "message": "Pass confirm=true to forget this memory.",
+                          "details": {"id": "mem_eA", "verb": "forget_memory", "content": "Postgres"},
+                          "retryable": False, "trace_id": "t-1"}}
+    c, seen = _recording([httpx.Response(428, json=envelope)])
+    with pytest.raises(ConfirmationRequiredError) as e:
+        c.memories.forget("mem_eA")
+    assert e.value.status == 428 and e.value.code == "confirmation_required"
+    assert e.value.details == {"id": "mem_eA", "verb": "forget_memory", "content": "Postgres"}
+    assert e.value.trace_id == "t-1" and e.value.body == envelope
+    assert len(seen) == 1  # a 428 is not retried
+
+
+def test_a_write_without_a_write_target_is_a_typed_422():
+    c, _ = _recording([
+        httpx.Response(422, json={"error": {"code": "write_target_required", "message": "reaches 2 Memories",
+                                            "details": {"memories_in_reach": 2}, "retryable": False}}),
+        httpx.Response(422, json={"error": {"code": "validation", "message": "Request validation failed.",
+                                            "details": {"fields": [{"loc": ["body", "container"]}]}}}),
+        httpx.Response(404, json={"error": {"code": "not_found", "message": "memory not found",
+                                            "details": {"id": "mem_x"}}}),
+    ])
+    with pytest.raises(WriteTargetRequiredError) as e:
+        c.add("notes")
+    assert isinstance(e.value, UnprocessableEntityError) and e.value.details == {"memories_in_reach": 2}
+    with pytest.raises(UnprocessableEntityError) as e:
+        c._request("POST", "/v1/search", json={"q": "x", "container": "mv-1"})
+    assert not isinstance(e.value, WriteTargetRequiredError) and e.value.code == "validation"
+    with pytest.raises(NotFoundError):
+        c.memories.get("mem_x")
