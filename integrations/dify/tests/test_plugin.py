@@ -324,7 +324,8 @@ def test_save_ignores_retired_parameters(executor, membase):
     invoke(
         executor, "save_memory", {"content": "Dark mode.", "container": "Travel", "static": True}
     )
-    assert body(membase.calls("POST", "/v1/memories/add")[0]) == {"content": "Dark mode.", "title": ""}
+    sent = body(membase.calls("POST", "/v1/memories/add")[0])
+    assert sent == {"content": "Dark mode.", "title": ""}
 
 
 def test_save_without_a_write_target_says_nothing_was_saved(executor, membase):
