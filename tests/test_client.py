@@ -238,3 +238,16 @@ def test_a_write_without_a_write_target_is_a_typed_422():
     assert not isinstance(e.value, WriteTargetRequiredError) and e.value.code == "validation"
     with pytest.raises(NotFoundError):
         c.memories.get("mem_x")
+
+
+def test_a_media_file_is_read_with_the_key_and_a_range():
+    answer = httpx.Response(
+        206, content=b"PNG", headers={"content-type": "image/png", "content-range": "bytes 1-3/9"}
+    )
+    m, seen = _recording([answer, httpx.Response(200, content=b"jpg")])
+    part = m.media.file("med_1", range="bytes=1-3")
+    assert (part.status, part.content, part.content_range) == (206, b"PNG", "bytes 1-3/9")
+    assert seen[0].url.path == "/v1/media/med_1/file" and seen[0].headers["range"] == "bytes=1-3"
+    assert seen[0].headers["authorization"] == "Bearer mbk_test"
+    m.media.file("med_1", thumb="shots/0001.jpg")
+    assert seen[1].url.path == "/v1/media/med_1/thumbs/shots/0001.jpg" and "range" not in seen[1].headers

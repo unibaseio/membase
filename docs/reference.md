@@ -79,6 +79,7 @@ Search runs in any language over captions and speech.
 | `GET /v1/media/{id}` | `m.media.get(id)` | `get_media` | `media get ID` |
 | `POST /v1/media/{id}/delete?confirm=` | `m.media.delete(id, confirm=)` | `delete_media` | `media delete ID [--confirm]` |
 | `POST /v1/media/search` `{q, kind?, limit?}` | `m.media.search(q, kind=)` | `search_media` | `media search Q [--kind]` |
+| `GET /v1/media/{id}/file`, `…/thumbs/{name}` (`Range` answers 206) | `m.media.file(id, thumb=, range=)` (TS `media.file(id, {thumb, range})`) | — (REST only) | — |
 | `POST /v1/media/ask` `{message}` (local only) | `m.media.ask(message)` | `ask_media` | `media ask MESSAGE` |
 | `GET /v1/media/{id}/file`, `/thumbs/{name}` | | | |
 

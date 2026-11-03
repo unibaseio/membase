@@ -132,11 +132,10 @@ def test_add_list_get_search_ask(local, tmp_path):
     item = local.media.get(out["id"])
     assert item["moments"] == [] and item["file_url"] == f"/v1/media/{out['id']}/file"
     assert item["thumb_url"] == item["file_url"]
-    r = local._http.get(item["file_url"])
-    assert r.status_code == 200 and r.content[:4] == b"\x89PNG" and r.headers["content-type"] == "image/png"
-    part = local._http.get(item["file_url"], headers={"Range": "bytes=1-3"})
-    assert part.status_code == 206 and part.content == b"PNG"
-    assert part.headers["content-range"].startswith("bytes 1-3/")
+    whole = local.media.file(out["id"])
+    assert whole.status == 200 and whole.content[:4] == b"\x89PNG" and whole.content_type == "image/png"
+    part = local.media.file(out["id"], range="bytes=1-3")
+    assert part.status == 206 and part.content == b"PNG" and part.content_range.startswith("bytes 1-3/")
 
     hits = local.media.search("red square")
     assert hits["items"][0]["id"] == out["id"] and hits["partial"] == []

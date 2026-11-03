@@ -128,11 +128,15 @@ class Membase:
         *,
         json: dict | None = None,
         params: dict | None = None,
+        headers: dict | None = None,
+        raw: bool = False,
     ) -> Any:
+        """The JSON answer; with ``raw`` the response itself (a file's bytes)."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Accept": "application/json",
+            "Accept": "*/*" if raw else "application/json",
             "User-Agent": f"unibaseio-membase-python/{__version__}",
+            **(headers or {}),
         }
         attempt = 0
         while True:
@@ -151,6 +155,8 @@ class Membase:
                     continue
                 raise APIConnectionError(f"{method} {path}: {e}") from e
             if 200 <= r.status_code < 300:
+                if raw:
+                    return r
                 return r.json() if r.content else None
             if (
                 r.status_code in _RETRY_STATUSES or r.status_code >= 500

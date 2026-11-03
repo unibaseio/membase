@@ -76,7 +76,8 @@ new `default`; several and none named is the same `422`. A fact added through th
 note (a `kind: "note"` document), so deleting the note forgets what it taught, as hosted. Local
 learning finishes before a write answers, so receipts say `succeeded`. Media items name their file
 and thumbnails as routes (`/v1/media/{id}/file`, `…/thumbs/{name}`, with `Range` support) instead of
-paths. Storing media (`media.add`) and `media.ask` stay local-only and take no container. Profile
+paths, read with `media.file(id, thumb=, range=)` (TypeScript `media.file(id, {thumb, range})`): the
+bytes, content type and, for a range, status 206 — with the key, hosted and local alike. Storing media (`media.add`) and `media.ask` stay local-only and take no container. Profile
 facts live in the store's profile (`~/.membase/profile/`) and need `unibaseio-membase-core` 0.3.5;
 a statement added locally is `user_stated`, one kept with `add --static` before 0.4 reads as
 `imported`. Local `ask` is the engine's answer from the Memory whose facts match best.

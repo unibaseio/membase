@@ -13,6 +13,7 @@ export type {
   Document,
   Receipt,
   MediaMoment,
+  MediaFile,
   MediaItem,
   MediaSearchResult,
   Removed,

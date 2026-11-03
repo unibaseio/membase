@@ -4,11 +4,24 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 if TYPE_CHECKING:
     from ..client import Membase
+
+
+@dataclass(frozen=True)
+class MediaFile:
+    """A photo's or video's bytes (or one of its thumbnails), as ``Media.file`` reads them."""
+
+    content: bytes
+    content_type: str
+    #: 200 for the whole file, 206 for the part a ``range`` asked for.
+    status: int
+    #: ``bytes <start>-<end>/<size>`` on a 206, else empty.
+    content_range: str = ""
 
 
 class Media:
@@ -38,6 +51,20 @@ class Media:
         if limit is not None:
             body["limit"] = limit
         return self._c._request("POST", "/v1/media/search", json=body)
+
+    def file(self, media_id: str, *, thumb: str | None = None, range: str | None = None) -> MediaFile:
+        """The item's file, or the thumbnail ``thumb`` (the name after ``/thumbs/`` in a
+        ``thumb_url``). ``range`` is an HTTP range (``bytes=0-1023``) and answers that part, with
+        status 206 — what a video player asks for. Hosted and local alike."""
+        path = f"/v1/media/{quote(media_id, safe='')}"
+        path += f"/thumbs/{quote(thumb, safe='/')}" if thumb else "/file"
+        r = self._c._request("GET", path, headers={"Range": range} if range else None, raw=True)
+        return MediaFile(
+            content=r.content,
+            content_type=r.headers.get("content-type", "application/octet-stream"),
+            status=r.status_code,
+            content_range=r.headers.get("content-range", ""),
+        )
 
     def delete(self, media_id: str, *, confirm: bool = False) -> dict:
         """Forget one item and remove its file. Needs Full access and ``confirm=True``; without it

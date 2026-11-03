@@ -43,6 +43,8 @@ export interface MediaMoment { t: number; end?: number | null; kind: string; tex
 /** A photo or video (`med_…`). `moments` is a count in lists, the moments themselves from `media.get` and `media.search`. */
 export interface MediaItem { id: string; kind: string; filename?: string | null; memory_name: string; summary: string; duration?: number | null; created_at?: string | null; file_url?: string | null; thumb_url?: string | null; moments?: MediaMoment[] | number | null; [k: string]: unknown }
 export interface MediaSearchResult { items: MediaItem[]; partial: PartialMemory[] }
+/** A photo's or video's bytes (or a thumbnail's); `status` is 206 for the part a `range` asked for. */
+export interface MediaFile { content: Uint8Array; contentType: string; status: number; contentRange: string }
 /** A carried-out removal. */
 export interface Removed { id: string; status: "forgotten" | "deleted" | string }
 /** One standing statement about the user (`pf_…`): the account's, not a Memory's. */
@@ -141,6 +143,25 @@ export class Membase {
     /** Items matching what was seen or said in `q`, best first; `kind` is `image` or `video`. */
     search: (params: { q: string; kind?: "image" | "video"; limit?: number }): Promise<MediaSearchResult> =>
       this.request("POST", "/v1/media/search", { body: { q: params.q, kind: params.kind, limit: params.limit } }),
+    /**
+     * The item's file, or the thumbnail `thumb` (the name after `/thumbs/` in a `thumb_url`).
+     * `range` is an HTTP range (`bytes=0-1023`) and answers that part with status 206.
+     */
+    file: async (mediaId: string, params: { thumb?: string; range?: string } = {}): Promise<MediaFile> => {
+      const path = params.thumb
+        ? `${item("media", mediaId)}/thumbs/${params.thumb.split("/").map(encodeURIComponent).join("/")}`
+        : `${item("media", mediaId)}/file`;
+      const res = await this.request<Response>("GET", path, {
+        headers: params.range ? { Range: params.range } : undefined,
+        raw: true,
+      });
+      return {
+        content: new Uint8Array(await res.arrayBuffer()),
+        contentType: res.headers.get("content-type") ?? "application/octet-stream",
+        status: res.status,
+        contentRange: res.headers.get("content-range") ?? "",
+      };
+    },
     /** Forget one item and remove its file. Needs Full access and `confirm: true`; otherwise `ConfirmationRequiredError` (428). */
     delete: (mediaId: string, params: { confirm?: boolean } = {}): Promise<Removed> =>
       this.request("POST", `${item("media", mediaId)}/delete`, { query: { confirm: flag(params.confirm) } }),
@@ -182,14 +203,21 @@ export class Membase {
   private async request<T>(
     method: string,
     path: string,
-    opts: { body?: Record<string, unknown>; query?: Record<string, string | number | undefined> } = {},
+    opts: {
+      body?: Record<string, unknown>;
+      query?: Record<string, string | number | undefined>;
+      headers?: Record<string, string>;
+      /** Answer with the response itself (a file's bytes) instead of its JSON. */
+      raw?: boolean;
+    } = {},
   ): Promise<T> {
     const url = new URL(this.baseUrl + path);
     for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
-      Accept: "application/json",
+      Accept: opts.raw ? "*/*" : "application/json",
       "User-Agent": `unibaseio-membase-typescript/${VERSION}`,
+      ...opts.headers,
     };
     let body: string | undefined;
     if (opts.body !== undefined) {
@@ -217,6 +245,7 @@ export class Membase {
       }
       clearTimeout(timer);
       if (res.ok) {
+        if (opts.raw) return res as T;
         const text = await res.text();
         return (text ? JSON.parse(text) : null) as T;
       }

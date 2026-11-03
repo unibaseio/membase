@@ -29,6 +29,27 @@ function scripted(responses: Array<{ status: number; body?: unknown; headers?: R
 }
 
 describe("Membase", () => {
+  it("reads a media file with the key, a range, and a thumbnail by name", async () => {
+    const calls: Call[] = [];
+    const answers = [
+      new Response(new Uint8Array([80, 78, 71]), { status: 206, headers: { "content-type": "image/png", "content-range": "bytes 1-3/9" } }),
+      new Response(new Uint8Array([1]), { status: 200, headers: { "content-type": "image/jpeg" } }),
+    ];
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: new URL(String(input)), init: init ?? {} });
+      return answers.shift()!;
+    }) as typeof fetch;
+    const c = new Membase({ apiKey: "mbk_k", baseUrl: "https://api.example.test", fetch: fetchImpl, maxRetries: 0 });
+    const part = await c.media.file("med_1", { range: "bytes=1-3" });
+    expect([part.status, Array.from(part.content), part.contentRange]).toEqual([206, [80, 78, 71], "bytes 1-3/9"]);
+    expect(calls[0].url.pathname).toBe("/v1/media/med_1/file");
+    const h = calls[0].init.headers as Record<string, string>;
+    expect([h.Range, h.Authorization]).toEqual(["bytes=1-3", "Bearer mbk_k"]);
+    const thumb = await c.media.file("med_1", { thumb: "shots/0001.jpg" });
+    expect([thumb.contentType, calls[1].url.pathname]).toEqual(["image/jpeg", "/v1/media/med_1/thumbs/shots/0001.jpg"]);
+    expect((calls[1].init.headers as Record<string, string>).Range).toBeUndefined();
+  });
+
   it("needs a key", () => {
     const saved = process.env.MEMBASE_API_KEY;
     delete process.env.MEMBASE_API_KEY;
