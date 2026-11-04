@@ -109,6 +109,18 @@ store = MembaseMemoryStore(api_key=Secret.from_token(key_for(user_id)))
 The store and the retriever serialize with the pipeline. The key is written as a `Secret`, so an
 environment-variable key stays a reference and a token key refuses to serialize.
 
+Haystack 3 loads only the components of modules on its deserialization allowlist, so allow this
+package's module before loading a saved pipeline (Haystack 2 needs no step):
+
+```python
+from haystack.core.serialization import allow_deserialization_module
+
+allow_deserialization_module("membase_haystack.memory")
+pipeline = Pipeline.loads(saved)
+```
+
+Or set `HAYSTACK_DESERIALIZATION_ALLOWLIST=membase_haystack.memory` in the environment.
+
 ## Local memory
 
 ```bash
