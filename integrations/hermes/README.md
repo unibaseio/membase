@@ -14,9 +14,9 @@ Hermes:
   (`capture_turns`, off by default).
 
 Only one external memory provider is active at a time in Hermes. Hermes' own MEMORY.md / USER.md
-keep working next to it, and what its built-in memory tool records about the user (USER.md) is
-also saved to their Membase profile as a standing fact. The agent's own notes (MEMORY.md) and
-removals are not.
+keep working next to it and stay Hermes's own, unless the Hermes build has `memory.user_store`
+and the profile sets it to `provider` (below): then facts about the user go to the Membase
+profile instead of USER.md.
 
 ## Install
 
@@ -46,15 +46,23 @@ the plugin reads it through Hermes' per-profile secret scope, never from a file 
 |---|---|---|---|
 | `MEMBASE_API_KEY` | `.env` (secret) | required | The developer key: one person's account |
 | `base_url` / `MEMBASE_BASE_URL` | `unibaseio-membase.json` / `.env` | `https://api.app.membase.com` | API endpoint |
-| `container` / `MEMBASE_CONTAINER` | `unibaseio-membase.json` / `.env` | every Memory in reach | Default Memory (name or id) for recall, saves and captures |
 | `recall_budget_seconds` | `unibaseio-membase.json` | `8` | How long the per-turn recall may take (0.5–8) |
 | `capture_turns` | `unibaseio-membase.json` | `false` | Save the user's own words from every completed turn as a note |
 | `auto_recall` | `unibaseio-membase.json` | `true` | Search before each turn |
 | `recall_limit` | `unibaseio-membase.json` | `5` | Passages injected per turn |
 | `recall_max_chars` | `unibaseio-membase.json` | `4000` | Upper bound on the injected block |
+| `recall_mode` / `MEMBASE_RECALL_MODE` | `unibaseio-membase.json` / `.env` | `full` | `fast`: one round of retrieval and no model call; at least 10 passages and 8,000 characters handed to the agent, whose own model judges them |
+| `tools` / `MEMBASE_TOOLS` | `unibaseio-membase.json` / `.env` | `on` | `off`: no `membase_*` tools; memory is left to recall before each turn (and Hermes's own memory), so no turn spends a model call deciding whether to search or save |
 
 The settings file is `$HERMES_HOME/unibaseio-membase.json` (mode 0600); it never holds the key.
 When a setting appears in both places, the value in the file wins.
+
+No setting picks a Memory. Recall and `membase_search` cover every Memory the key reaches; saves
+and captures land in the key's **write target**, the one Memory it reaches. A key that reaches
+several Memories has no write target and its saves are refused, so give the key a single Memory
+under **Connect › Developer keys** if the agent should save. The `container` setting and
+`MEMBASE_CONTAINER` of earlier releases are no longer read; the provider logs a warning when it
+still finds them.
 
 ## How it behaves
 
@@ -63,8 +71,8 @@ When a setting appears in both places, the value in the file wins.
 characters, after Hermes' secret redaction) to `POST /v1/search` and gets up to `recall_limit`
 passages back. The call uses its own client with the recall budget as its timeout and no
 retries. Hermes also stops waiting for any external provider after 8 s, which is why a larger
-budget has no effect. If a Memory reports an error (no working model, dormant), the block says
-it was not searched. A missing passage from that Memory is not proof that nothing is remembered.
+budget has no effect. If a Memory could not answer (listed in the search's `partial`: no working
+model, dormant), the block says it was not searched. A missing passage from that Memory is not proof that nothing is remembered.
 A `403` (key narrowed or revoked) stops automatic recall for the rest of the session instead of
 retrying every turn.
 
@@ -72,19 +80,27 @@ retrying every turn.
 
 | Tool | Does |
 |---|---|
-| `membase_search(query, container?, limit?)` | Passages, each naming its Memory. Memories that could not answer are listed under `unavailable`. |
-| `membase_save(content, container?, static?)` | Saves a note to a Memory. It is **queued**: the Memory learns it on its next run and it is searchable after that. `static: true` records a standing fact about the user in their profile instead. |
-| `membase_profile(query?)` | The user's standing (`static`) and recent (`dynamic`) facts. Works only when the key's owner ticked the profile. |
+| `membase_search(query, limit?)` | Passages from every Memory in reach, each naming its Memory. Memories that could not answer are listed under `unavailable`. |
+| `membase_save(content)` | Saves a note to the key's write target. The answer carries the note's `id` (`doc_…`) and its learning `status`: usually `processing` or `pending`, so the Memory learns it on its next run and it is searchable after that. |
+| `membase_profile()` | The user's profile facts: standing statements about who they are, newest first. Works only when the key's owner ticked **Your profile**. |
 
-`container` takes a Memory's name (case-insensitive) or id. When the key reaches several
-Memories and no default is configured, `membase_save` answers with the list to choose from.
-There is no delete or forget tool. Deleting stays with the owner, in the Membase app.
+When the key has no write target, `membase_save` says that nothing was saved and how the owner
+fixes it. There is no delete or forget tool. Deleting stays with the owner, in the Membase app.
 
 **Capture (opt-in).** With `capture_turns` on, the user's own words from each completed turn are
-saved as one note, as they wrote them, to the default Memory. The assistant's reply is never sent
+saved as one note, as they wrote them, to the key's write target. The assistant's reply is never sent
 and no role labels are added, so an AI answer is never learned as a fact about the user. Captures never run from `cron`, `subagent` or
-`flush` agents, or for turns written by bots. With several Memories in reach, set `container`.
-Otherwise the capture is refused, and the refusal is logged once.
+`flush` agents, or for turns written by bots. A key without a write target has its captures
+refused, and the refusal is logged once.
+
+**The user's profile (`memory.user_store: provider`).** A Hermes build that has the
+`memory.user_store` setting can hand facts about the user to the provider instead of writing
+USER.md. With it set to `provider` in the profile's `config.yaml`, what Hermes's memory tool
+records about the user goes to the Membase profile (`POST /v1/profile-facts/add`, through
+`record_user_fact`), and recall before each turn also reads the profile, beside the search, and
+hands its standing facts (newest first, up to 3,000 characters) to the agent as data. A profile
+that could not be read is said to be unread, never shown as empty. The agent cannot remove a
+fact; the user forgets facts in the Membase app. `cron`, `subagent` and `flush` agents record none.
 
 **Errors** come back to the model as one plain sentence:
 
@@ -92,7 +108,8 @@ Otherwise the capture is refused, and the refusal is logged once.
 |---|---|
 | `403` | "this Membase key was narrowed or revoked, or the action is above its access level; do not retry with it" |
 | timeout | "the memory may be waking up, try again shortly" |
-| `422` | "no working model or no free turns" |
+| `422 write_target_required` | "this Membase key reaches several Memories and has no write target, so nothing was saved; give the key a single Memory under Connect > Developer keys" |
+| other `422` | "no working model or no free turns" |
 
 The key never appears in an error or a log line.
 
@@ -110,8 +127,7 @@ The key never appears in an error or a log line.
   `MembaseMemoryProvider(client_for=lambda user_id: Membase(api_key=key_of(user_id)))` picks
   each turn's client from the gateway user id. A turn without a user id then gets no memory at
   all, never someone else's.
-- **Saves are not instant.** A note is learned on the Memory's next run. A `static` fact is
-  recorded at once.
+- **Saves are not instant.** A note is learned on the Memory's next run.
 - **Plan usage.** Searches and learning runs execute in the user's Membase account and count
   against its plan.
 - **Hosted only.** The catalog build talks to the hosted API. Membase's local mode
@@ -137,7 +153,7 @@ runs no shell command, sends no telemetry and has no self-update code.
 cd hermes
 git clone --depth 1 https://github.com/NousResearch/hermes-agent .cache/hermes-agent
 uv venv --python 3.14 .venv
-uv pip install --python .venv/bin/python -e .cache/hermes-agent "unibaseio-membase>=0.3.0,<0.4" pytest
+uv pip install --python .venv/bin/python -e .cache/hermes-agent "unibaseio-membase>=0.4.0,<0.5" pytest
 .venv/bin/python -m pytest -q                                   # offline
 .venv/bin/hermes plugins validate . --install-deps              # the catalog CI gate (run on a clean checkout)
 MEMBASE_API_KEY=mbk_... .venv/bin/python examples/live_smoke.py   # real API, read-only (--write saves one note)

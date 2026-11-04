@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qsl, urlparse
 
 from .backend import LocalBackend
-from .routes import dispatch, error_body
+from .routes import Raw, dispatch, error_body
 
 
 def make_server(host: str = "127.0.0.1", port: int = 8787, root: str | None = None,
@@ -28,10 +28,15 @@ def make_server(host: str = "127.0.0.1", port: int = 8787, root: str | None = No
             return
 
         def _answer(self, status: int, payload: object) -> None:
-            data = json.dumps(payload).encode()
+            if isinstance(payload, Raw):
+                data, kind, extra = payload.body, payload.content_type, payload.headers
+            else:
+                data, kind, extra = json.dumps(payload).encode(), "application/json", {}
             self.send_response(status)
-            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Type", kind)
             self.send_header("Content-Length", str(len(data)))
+            for k, v in extra.items():
+                self.send_header(k, v)
             self.end_headers()
             self.wfile.write(data)
 
@@ -44,10 +49,11 @@ def make_server(host: str = "127.0.0.1", port: int = 8787, root: str | None = No
             try:
                 body = json.loads(self.rfile.read(length)) if length else None
             except json.JSONDecodeError:
-                self._answer(400, error_body(400, "bad_request", "body is not JSON"))
+                self._answer(422, error_body(422, "validation", "body is not JSON"))
                 return
             with lock if self.command != "GET" else _nolock:
-                status, payload = dispatch(backend, self.command, url.path, dict(parse_qsl(url.query)), body)
+                status, payload = dispatch(backend, self.command, url.path, dict(parse_qsl(url.query)), body,
+                                           dict(self.headers.items()))
             self._answer(status, payload)
 
         do_GET = do_POST = do_DELETE = _handle

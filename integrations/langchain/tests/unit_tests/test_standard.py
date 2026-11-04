@@ -64,13 +64,13 @@ class _Search(_ToolParams):
 class _Save(_ToolParams):
     tool_class = MembaseSaveTool
     tool_name = "membase_save"
-    example = {"content": "I prefer dark mode.", "static": True}
+    example = {"content": "I prefer dark mode."}
 
 
 class _Profile(_ToolParams):
     tool_class = MembaseProfileTool
     tool_name = "membase_profile"
-    example = {"topic": "working hours"}
+    example = {}
 
 
 class TestSearchToolUnit(_Search, ToolsUnitTests):

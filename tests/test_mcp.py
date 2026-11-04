@@ -13,8 +13,9 @@ pytest.importorskip("mcp", reason="needs the mcp extra")
 pytest.importorskip("membase_core", reason="needs the local extra")
 
 PROTOCOL_TOOLS = {
-    "list_containers", "search_memories", "get_profile", "list_documents", "memory_rules",
-    "add_memory", "add_document", "delete_document", "forget_memory", "ask_agent",
+    "get_capabilities", "search_memories", "ask_memory", "list_memories", "get_memory", "add_memory",
+    "forget_memory", "list_profile_facts", "add_profile_fact", "forget_profile_fact", "list_documents",
+    "get_document", "add_document", "delete_document",
 }
 MEDIA_TOOLS = {"add_media", "list_media", "get_media", "search_media", "ask_media", "delete_media"}
 
@@ -34,18 +35,22 @@ async def _drive(store, env):
     )
     async with stdio_client(params) as (read, write), ClientSession(read, write) as session:
         await session.initialize()
-        tools = {t.name for t in (await session.list_tools()).tools}
-        added = await session.call_tool("add_memory", {"content": "Prefers tea", "static": True})
-        profile = await session.call_tool("get_profile", {})
-        return tools, added, profile
+        listed = (await session.list_tools()).tools
+        found = await session.call_tool("search_memories", {"q": "tea", "mode": "fast"})
+        documents = await session.call_tool("list_documents", {"kind": "note"})
+        forget = await session.call_tool("forget_memory", {"memory_id": "mem_bm9uZQ"})
+        return listed, found, documents, forget
 
 
 def test_stdio_server_serves_the_protocol_tools(tmp_path):
     env = {k: v for k, v in os.environ.items() if k not in ("MEMBASE_PRIVATE_KEY", "MEMBASE_API_KEY")}
-    tools, added, profile = asyncio.run(_drive(tmp_path / "store", env))
-    assert tools == _local_tools()
-    assert not added.isError and json.loads(added.content[0].text)["status"] == "recorded"
-    assert json.loads(profile.content[0].text)["static"] == ["Prefers tea"]
+    listed, found, documents, forget = asyncio.run(_drive(tmp_path / "store", env))
+    assert {t.name for t in listed} == _local_tools()
+    for tool in listed:
+        assert "container" not in tool.inputSchema.get("properties", {}), tool.name
+    assert json.loads(found.content[0].text) == {"items": [], "partial": []}
+    assert json.loads(documents.content[0].text) == {"items": [], "has_more": False, "partial": []}
+    assert forget.isError and "memory not found" in forget.content[0].text
 
 
 def test_automem_tools_appear_with_a_wallet_key(tmp_path):

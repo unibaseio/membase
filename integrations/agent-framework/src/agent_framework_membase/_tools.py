@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import os
-from typing import Annotated, Any
+from typing import Annotated
 
 from agent_framework import FunctionInvocationContext, FunctionTool, tool
 from membase import Membase
-from membase.errors import BadRequestError, MembaseError, PermissionDeniedError
+from membase.errors import PermissionDeniedError, WriteTargetRequiredError
 from pydantic import Field
 
 from ._common import (
     DEFAULT_SOURCE_ID,
+    NO_WRITE_TARGET,
     REVOKED,
     ClientFor,
     Clients,
@@ -20,28 +21,6 @@ from ._common import (
     format_search,
     in_thread,
 )
-
-
-def _resolve_container(client: Membase, wanted: str) -> tuple[str | None, str]:
-    """``(container_id, name)`` for a container given by id or by name, else ``(None, message)``."""
-    containers = client.containers.list().get("containers") or []
-    key = wanted.strip().casefold()
-    for c in containers:
-        if str(c.get("id", "")) == wanted.strip():
-            return str(c["id"]), str(c.get("name") or c["id"])
-    for c in containers:
-        if str(c.get("name", "")).strip().casefold() == key:
-            return str(c["id"]), str(c.get("name") or c["id"])
-    names = ", ".join(f'"{c.get("name")}"' for c in containers) or "none"
-    return None, f'No Memory called "{wanted}" is in reach of this key. Memories in reach: {names}.'
-
-
-def _names(client: Membase) -> str:
-    try:
-        containers = client.containers.list().get("containers") or []
-    except MembaseError:
-        return ""
-    return ", ".join(f'"{c.get("name")}"' for c in containers)
 
 
 def membase_tools(
@@ -77,25 +56,15 @@ def membase_tools(
     @tool(name="membase_search", approval_mode="never_require")
     async def membase_search(
         query: Annotated[str, Field(description="What to look for, in natural language.")],
-        container: Annotated[
-            str | None,
-            Field(
-                description="Only this Memory (its name as shown in results). Omit to search every Memory."
-            ),
-        ] = None,
         limit: Annotated[int | None, Field(description="How many passages, 1-50.", ge=1, le=50)] = None,
         ctx: FunctionInvocationContext | None = None,
     ) -> str:
-        """Search the user's long-term Membase memory. Returns passages, each tagged with the
-        Memory it came from; name that Memory when you use a passage."""
+        """Search the user's long-term Membase memory (every Memory the key reaches). Returns
+        passages, each tagged with the Memory it came from; name that Memory when you use a
+        passage."""
         try:
             mb = _client(ctx)
-            container_id = None
-            if container:
-                container_id, note = await in_thread(_resolve_container, mb, container)
-                if container_id is None:
-                    return note
-            answer = await in_thread(mb.search, query, container=container_id, limit=limit)
+            answer = await in_thread(mb.search, query, limit=limit)
         except NoUserBound as exc:
             return f"Membase is not available: {exc}."
         except Exception as exc:  # noqa: BLE001 - the tool answers the model with the error
@@ -107,7 +76,10 @@ def membase_tools(
             else ["No passages in the user's Membase memory matched."]
         )
         if unanswered:
-            out += ["These Memories could not answer, so this is not proof nothing is stored:", *unanswered]
+            out += [
+                "Some Memories did not fully answer, so this is not proof nothing is stored:",
+                *unanswered,
+            ]
         return "\n".join(out)
 
     @tool(name="membase_save", approval_mode="never_require")
@@ -115,58 +87,35 @@ def membase_tools(
         content: Annotated[
             str, Field(description="The fact to keep, in the user's own words. One fact per call.")
         ],
-        container: Annotated[
-            str | None,
-            Field(description="The Memory that keeps it (its name). Needed when the user has several."),
-        ] = None,
-        about_user: Annotated[
-            bool,
-            Field(
-                description=(
-                    "True for a standing fact about the user themselves (who they are, a lasting "
-                    "preference): it goes to their profile instead of a Memory."
-                )
-            ),
-        ] = False,
         ctx: FunctionInvocationContext | None = None,
     ) -> str:
         """Save something to the user's Membase memory. Call this only when the user asks you
         to remember something or plainly means it; never save your own conclusions."""
         try:
             mb = _client(ctx)
-            container_id, name = None, ""
-            if container and not about_user:
-                container_id, name = await in_thread(_resolve_container, mb, container)
-                if container_id is None:
-                    return name
-            result = await in_thread(mb.memories.add, content, container=container_id, static=about_user)
+            result = await in_thread(mb.memories.add, content)
         except NoUserBound as exc:
             return f"Membase is not available: {exc}."
-        except BadRequestError as exc:
-            names = await in_thread(_names, mb)
-            hint = f" Pass container= with one of: {names}." if names and not container else ""
-            return f"Membase did not save it: {exc.message}.{hint}"
+        except WriteTargetRequiredError:
+            return f"Membase did not save it: {NO_WRITE_TARGET}."
         except PermissionDeniedError as exc:
             return f"Membase did not save it (403): {REVOKED}; a Read key cannot write. ({exc.message})"
         except Exception as exc:  # noqa: BLE001 - the tool answers the model with the error
             return describe_error(exc)
-        if (result or {}).get("static"):
-            return "Recorded in the user's Membase profile."
-        where = f' "{name}"' if name else ""
-        return f"Saved to Membase{where}; it is queued and will be searchable once the Memory has learned it."
+        result = result or {}
+        names = [x.get("memory_name") for x in result.get("learning") or [] if x.get("memory_name")]
+        where = f' "{names[0]}"' if names else ""
+        if result.get("status") == "succeeded":
+            return f"Saved to Membase{where}; it is learned and searchable now."
+        return f"Saved to Membase{where}; it will be searchable once the Memory has learned it."
 
     @tool(name="membase_profile", approval_mode="never_require")
-    async def membase_profile(
-        topic: Annotated[
-            str | None, Field(description="Optional topic to pull relevant profile facts for.")
-        ] = None,
-        ctx: FunctionInvocationContext | None = None,
-    ) -> str:
-        """Read the user's Membase profile: standing facts about who they are and their
-        preferences, and the most recently changed ones. Read it once, near the start."""
+    async def membase_profile(ctx: FunctionInvocationContext | None = None) -> str:
+        """Read the user's Membase profile: standing statements about who they are (name, role,
+        lasting preferences), newest first. Read it once, near the start."""
         try:
             mb = _client(ctx)
-            p = await in_thread(mb.profile, topic)
+            p = await in_thread(mb.profile_facts.list)
         except NoUserBound as exc:
             return f"Membase is not available: {exc}."
         except PermissionDeniedError as exc:
@@ -176,17 +125,11 @@ def membase_tools(
             )
         except Exception as exc:  # noqa: BLE001 - the tool answers the model with the error
             return describe_error(exc)
-        out: list[str] = []
-        for label, key in (
-            ("Standing facts", "static"),
-            ("Recently changed", "dynamic"),
-            ("On the topic", "results"),
-        ):
-            items = [_text(x) for x in (p or {}).get(key) or []]
-            items = [x for x in items if x]
-            if items:
-                out.append(f"{label}:\n" + "\n".join(f"- {x}" for x in items))
-        return "\n\n".join(out) or "The user's Membase profile is empty."
+        items = [str(x.get("content") or "").strip() for x in (p or {}).get("items") or []]
+        items = [x for x in items if x]
+        if not items:
+            return "The user's Membase profile is empty."
+        return "About the user:\n" + "\n".join(f"- {x}" for x in items)
 
     tools: list[FunctionTool] = [membase_search]
     if save:
@@ -194,14 +137,6 @@ def membase_tools(
     if profile:
         tools.append(membase_profile)
     return tools
-
-
-def _text(item: Any) -> str:
-    if isinstance(item, str):
-        return item.strip()
-    if isinstance(item, dict):
-        return str(item.get("content") or item.get("text") or item.get("memory") or "").strip()
-    return str(item).strip()
 
 
 __all__ = ["membase_tools"]

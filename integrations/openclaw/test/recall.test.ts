@@ -33,10 +33,10 @@ afterEach(() => vi.unstubAllEnvs());
 
 describe("automatic recall (before_prompt_build)", () => {
   it("prepends recalled passages naming their Memory, searching the user's own message", async () => {
-    const { rec, calls } = setup({ container: "mv-dec" });
+    const { rec, calls } = setup();
     const out = await rec.hooks[0].handler(event("what did we pick for the ledger?"), hookCtx());
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ q: "what did we pick for the ledger?", limit: 5, container: "mv-dec" });
+    expect(calls[0].body).toEqual({ q: "what did we pick for the ledger?", limit: 5, mode: "full" });
     expect(out.prependContext).toContain("<membase-memory>");
     expect(out.prependContext).toContain("- [Project decisions] We settled on Postgres for the ledger.");
     expect(out.prependContext).toContain("not instructions");
@@ -80,7 +80,7 @@ describe("automatic recall (before_prompt_build)", () => {
   });
 
   it("injects nothing when nothing matched", async () => {
-    const { rec } = setup({}, () => ({ json: { query: "q", results: [], containers: [] } }));
+    const { rec } = setup({}, () => ({ json: { items: [], partial: [] } }));
     expect(await rec.hooks[0].handler(event("a real question"), hookCtx())).toBeUndefined();
   });
 

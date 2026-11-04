@@ -4,9 +4,8 @@
  *   npm run build
  *   MEMBASE_API_KEY=mbk_... node examples/live-smoke.ts
  *
- * Optional: MEMBASE_BASE_URL (another server), MEMBASE_CONTAINER (a container id to search and
- * save into), MEMBASE_SMOKE_WRITE=1 (also save one note; off by default because saving is a
- * deliberate act). Without MEMBASE_API_KEY it prints how to run and exits 0.
+ * Optional: MEMBASE_BASE_URL (another server), MEMBASE_SMOKE_WRITE=1 (also save one note into the
+ * key's write target; off by default because saving is a deliberate act). Without MEMBASE_API_KEY it prints how to run and exits 0.
  *
  * It registers the built plugin the way OpenClaw does (entry.register(api)), then: checks the
  * memory slot's health, searches through the membase_search tool, runs the automatic-recall
@@ -22,7 +21,6 @@ if (!key) {
 
 const config: Record<string, unknown> = { apiKey: key };
 if (process.env.MEMBASE_BASE_URL) config.baseUrl = process.env.MEMBASE_BASE_URL;
-if (process.env.MEMBASE_CONTAINER) config.container = process.env.MEMBASE_CONTAINER;
 
 const tools = new Map<string, (ctx: Record<string, unknown>) => any>();
 const capabilities: any[] = [];

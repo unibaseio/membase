@@ -17,6 +17,7 @@ from membase.errors import (
     PermissionDeniedError,
     RateLimitError,
     UnprocessableEntityError,
+    WriteTargetRequiredError,
 )
 
 logger = logging.getLogger("agent_framework_membase")
@@ -34,6 +35,11 @@ T = TypeVar("T")
 ClientFor = Callable[[str], Membase]
 
 REVOKED = "this Membase key was narrowed or revoked by its owner, or it does not allow this operation"
+
+NO_WRITE_TARGET = (
+    "this Membase key reaches several Memories and has no write target, so nothing was saved; "
+    "give the key a single Memory under Connect › Developer keys in the Membase app"
+)
 
 
 def bind_user(session: Any, user_id: str, *, source_id: str = DEFAULT_SOURCE_ID) -> None:
@@ -140,6 +146,8 @@ def _log_late_failure(task: asyncio.Future[Any]) -> None:
 
 def describe_error(exc: BaseException) -> str:
     """One actionable sentence for an SDK failure."""
+    if isinstance(exc, WriteTargetRequiredError):
+        return f"Membase did not save it: {NO_WRITE_TARGET}."
     if isinstance(exc, PermissionDeniedError):
         return f"Membase refused the call (403): {REVOKED}. Do not retry with this key. ({exc.message})"
     if isinstance(exc, APITimeoutError):
@@ -158,21 +166,26 @@ def describe_error(exc: BaseException) -> str:
 
 
 def format_search(answer: Mapping[str, Any] | None) -> tuple[list[str], list[str]]:
-    """``(passages, unanswered)``: one line per passage citing its container, one per Memory
-    that could not answer (so an empty result is never mistaken for an empty memory)."""
+    """``(passages, unanswered)``: one line per passage citing its Memory, one per Memory that
+    could not answer or whose passages did not fit the limit (``partial``), so an empty result
+    is never mistaken for an empty memory."""
     answer = answer or {}
     passages: list[str] = []
-    for hit in answer.get("results") or []:
+    for hit in answer.get("items") or []:
         if not isinstance(hit, Mapping):
             continue
         content = str(hit.get("content") or "").strip()
         if not content:
             continue
-        where = str(hit.get("container_name") or hit.get("container") or "Membase").strip()
+        where = str(hit.get("memory_name") or "Membase").strip()
         passages.append(f"- [{where}] {content}")
     unanswered: list[str] = []
-    for c in answer.get("containers") or []:
-        if isinstance(c, Mapping) and c.get("error"):
-            name = c.get("name") or c.get("id") or "a Memory"
-            unanswered.append(f'- "{name}" could not answer: {c["error"]}')
+    for p in answer.get("partial") or []:
+        if not isinstance(p, Mapping):
+            continue
+        name = p.get("memory_name") or "a Memory"
+        if p.get("reason") == "truncated":
+            unanswered.append(f'- "{name}" had more passages than the limit let through')
+        else:
+            unanswered.append(f'- "{name}" could not answer')
     return passages, unanswered

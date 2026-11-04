@@ -7,7 +7,7 @@
 
 - **Recall before each user turn.** The manager's context injection calls `search`, and the
   passages it returns are folded into that model call. Each one names the Membase memory
-  (container) it came from: `[Project decisions] We chose Postgres for the ledger.`
+  it came from (`memory_name`): `[Project decisions] We chose Postgres for the ledger.`
 - **Time-boxed, fail-open recall.** A Membase search runs inside the account's own memory
   container, and the first one after a quiet spell takes longer while it wakes. The
   automatic recall gets 8 seconds by default (`recall_timeout`). If it runs out, the manager
@@ -48,7 +48,7 @@ agent("Which database did we pick for the ledger?")
 # </memory>
 
 agent("Remember that we moved the launch to May.")
-# The model calls membase_save(content="We moved the launch to May.", container="Project decisions")
+# The model calls membase_save(content="We moved the launch to May."); it lands in the key's write target
 ```
 
 ### Why `search_tool_config=False`
@@ -56,16 +56,16 @@ agent("Remember that we moved the launch to May.")
 The manager's built-in `search_memory` tool calls the same time-boxed `search` as injection.
 On a cold start it would give up after 8 seconds and show the model an empty list. The
 store's own `membase_search` tool waits for the SDK's full timeout (90 s), so a cold start
-gets an answer. It also lets the model pick one Memory by name, and it says when a Memory
-could not answer. You can keep both tools if you prefer.
+gets an answer, and it says when a Memory could not answer. You can keep both tools if you
+prefer.
 
 ## Tools
 
 | Tool | What it does |
 |---|---|
-| `membase_search(query, container?, limit?)` | Searches every Memory in reach, or one Memory by name or id. Each passage is cited as `[Memory name] …`. A Memory that could not answer is listed as such, so it is not mistaken for "no memory". |
-| `membase_save(content, container?, standing_fact?)` | Saves a note in the user's words. `standing_fact=true` records a lasting fact in the user's profile. If the key reaches several Memories and none is named, the tool returns their names so the model can ask which one. |
-| `membase_profile(topic?)` | Reads the user's standing facts and recent changes. This needs the owner to have ticked the profile for the key. |
+| `membase_search(query, limit?)` | Searches every Memory the key reaches. Each passage is cited as `[Memory name] …`. A Memory that could not answer is listed as such, so it is not mistaken for "no memory". |
+| `membase_save(content)` | Saves a note in the user's words, into the key's write target: the one Memory the key reaches. A key that reaches several Memories has no write target and nothing is saved; the tool says so, and the owner gives the key a single Memory under **Connect › Developer keys**. |
+| `membase_profile()` | Reads the user's profile facts: standing statements about who they are, newest first. This needs the owner to have ticked **Your profile** for the key. |
 
 Pick the tools with `tools=("search", "profile")`. For example, drop `"save"` for a Read key.
 There is no delete or forget tool, and the store never confirms a destructive operation for
@@ -79,7 +79,6 @@ MembaseMemoryStore(
     api_key=None,             #   MEMBASE_API_KEY
     base_url=None,            #   MEMBASE_BASE_URL, default https://api.app.membase.com
     local=None,               #   a directory for local mode (pip install 'membase-strands[local]')
-    container=None,           # one Memory (name or id) to search and write to; default: all in reach
     name="membase",           # store name in the manager
     max_search_results=None,  # passages per search when the caller passes none (default 5)
     recall_timeout=8.0,       # budget for the automatic recall; None = SDK timeout
@@ -99,14 +98,14 @@ is given, and a transcript of every turn would teach it the assistant's own answ
 To capture anyway:
 
 ```python
-store = MembaseMemoryStore(container="Conversations", capture=True, extraction=True)
+store = MembaseMemoryStore(capture=True, extraction=True)
 agent = Agent(memory_manager=MemoryManager(stores=[store], search_tool_config=False))
 ```
 
 With `extraction=True` the manager hands batches of turns to `add_messages`, by default every
 5 turns and at the end of each synchronous `agent(...)` call. The store saves the user's
-messages from the batch as one note in `container`, and Membase learns from it in the
-background. `capture_roles=("user", "assistant")` keeps both sides. `capture=True` also lets
+messages from the batch as one note in the key's write target, and Membase learns from it in
+the background. `capture_roles=("user", "assistant")` keeps both sides. `capture=True` also lets
 you enable the manager's own `add_memory` tool (`MemoryManager(..., add_tool_config=True)`).
 A retried batch can be saved twice.
 
@@ -131,8 +130,11 @@ def agent_for(user) -> Agent:
   `MembaseAccessError`; the manager logs it and continues without memory. The tools return
   "this Membase key was narrowed or revoked…" so the model can tell the user. Nothing retries
   with that key.
-- **A Memory that could not answer** (no working model, dormant) is reported. Recall returns
-  an entry that says so, and `membase_search` lists it under "Not searched".
+- **A Memory that could not answer** (no working model, dormant; listed in the search's
+  `partial`) is reported. Recall returns an entry that says so, and `membase_search` lists it
+  under "Not searched".
+- **No write target** (`WriteTargetRequiredError`, 422): the key reaches several Memories, so
+  nothing was saved. `membase_save` says so; captured writes raise it.
 - **A recall that runs out of time** raises `MembaseRecallTimeout` (a `TimeoutError`); the
   manager logs it and continues. The tools use the SDK timeout and, if that runs out too,
   return a "try again in a minute" sentence.
@@ -144,7 +146,7 @@ The key is never logged.
 ## Compatibility
 
 Python 3.10+, `strands-agents>=1.45.0` (the first release with `strands.memory`) and
-`unibaseio-membase>=0.3.2`. The offline tests pass on strands-agents 1.45.0, 1.50.0, 1.55.0
+`unibaseio-membase>=0.4.0`. The offline tests pass on strands-agents 1.45.0, 1.50.0, 1.55.0
 and 1.61.1.
 
 ## Development

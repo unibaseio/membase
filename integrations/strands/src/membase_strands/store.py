@@ -16,7 +16,7 @@
   the user asked to keep, in their words, rather than every turn.
 * :meth:`MembaseMemoryStore.get_tools` gives the model ``membase_search``,
   ``membase_save`` and ``membase_profile``: deliberate calls with the SDK's full
-  timeout, whose results cite the Membase memory (container) each passage came from.
+  timeout, whose results cite the Membase memory each passage came from (``memory_name``).
 
 Failure contract (mirrors the SDK's vended stores): ``search``, ``add`` and
 ``add_messages`` raise on failure, because the manager owns isolation. It logs a failed
@@ -42,6 +42,7 @@ from membase.errors import (
     PermissionDeniedError,
     RateLimitError,
     UnprocessableEntityError,
+    WriteTargetRequiredError,
 )
 from strands import tool
 from strands.memory import AddMessagesContext, MemoryEntry, MemoryStore, SearchOptions
@@ -65,6 +66,10 @@ ALL_TOOLS = ("search", "save", "profile")
 REVOKED_MESSAGE = (
     "Membase refused this request (403): this Membase key was narrowed or revoked by its owner, "
     "or it does not allow this operation. Ask the owner for access; do not retry with this key."
+)
+WRITE_TARGET_MESSAGE = (
+    "This Membase key reaches several Memories and has no write target, so nothing was saved. "
+    "Give the key a single Memory under Connect › Developer keys in the Membase app."
 )
 TIMEOUT_MESSAGE = (
     "Membase did not answer in time. The memory may still be waking up after a quiet spell; try again in a minute."
@@ -99,9 +104,6 @@ class MembaseMemoryStore(MemoryStore):
         api_key: A Membase developer key (Read, or Read & write to save).
         base_url: Overrides ``https://api.app.membase.com`` (or ``MEMBASE_BASE_URL``).
         local: A directory for local mode (``pip install 'unibaseio-membase[local]'``).
-        container: The Memory (container id or name) to search and to write captured
-            turns to. Omit to search every Memory the key reaches; writes then need it
-            when the key reaches more than one.
         name: Store name the manager and its tools use. Defaults to ``"membase"``.
         description: Shown to the model in the manager's search tool description.
         max_search_results: Default passages per search when the caller passes none.
@@ -129,7 +131,6 @@ class MembaseMemoryStore(MemoryStore):
         api_key: str | None = None,
         base_url: str | None = None,
         local: str | bool | None = None,
-        container: str | None = None,
         name: str = "membase",
         description: str | None = DEFAULT_DESCRIPTION,
         max_search_results: int | None = None,
@@ -164,13 +165,11 @@ class MembaseMemoryStore(MemoryStore):
         self.writable = capture
         self.extraction = extraction
 
-        self.container = container
         self.recall_timeout = recall_timeout
         self.capture = capture
         self.capture_roles = tuple(capture_roles)
         self.tool_names = tool_names
 
-        self._container_ids: dict[str, str] = {}
         self._recall_inflight: concurrent.futures.Future[Any] | None = None
         self._lock = threading.Lock()
 
@@ -235,26 +234,22 @@ class MembaseMemoryStore(MemoryStore):
                 f"Membase recall took longer than {self.recall_timeout}s; continuing without memory"
             ) from None
 
-    def _search_raw(self, query: str, limit: int | None, container: str | None = None) -> dict[str, Any]:
-        target = container if container is not None else self.container
-        container_id = self._resolve_container(target) if target else None
-        return self.client.search(query, container=container_id, limit=limit)
+    def _search_raw(self, query: str, limit: int | None) -> dict[str, Any]:
+        return self.client.search(query, limit=limit)
 
     # ------------------------------------------------------------------ writes
 
     async def add(self, content: str, metadata: dict[str, Any] | None = None) -> Any:
         """Save one note to Membase. Only reachable through the manager with ``capture=True``.
 
-        ``metadata`` may carry ``title`` and ``static`` (a standing fact for the profile);
-        other keys are not sent, since Membase does not filter on metadata.
+        ``metadata`` may carry ``title``; other keys are not sent, since Membase does not
+        filter on metadata. The note lands in the key's write target.
         """
         self._require_capture("add")
         if not content or not content.strip():
             raise ValueError("MembaseMemoryStore: content must not be empty")
-        meta = metadata or {}
-        static = bool(meta.get("static", False))
-        title = str(meta.get("title") or "")
-        return await asyncio.to_thread(_translate_403, lambda: self._save(content, None, static, title))
+        title = str((metadata or {}).get("title") or "")
+        return await asyncio.to_thread(_translate_403, lambda: self._save(content, title))
 
     async def add_messages(self, messages: list[Message], context: AddMessagesContext | None = None) -> Any:
         """Save a batch of turns as one note for Membase to learn from (``capture=True`` only).
@@ -277,9 +272,7 @@ class MembaseMemoryStore(MemoryStore):
         if not lines:
             return None
         note = "\n\n".join(lines)
-        return await asyncio.to_thread(
-            _translate_403, lambda: self._save(note, None, False, "Conversation with a Strands agent")
-        )
+        return await asyncio.to_thread(_translate_403, lambda: self._save(note, "Conversation with a Strands agent"))
 
     def _require_capture(self, method: str) -> None:
         if not self.capture:
@@ -288,30 +281,9 @@ class MembaseMemoryStore(MemoryStore):
                 "let the model call membase_save, or build the store with capture=True."
             )
 
-    def _save(self, content: str, container: str | None, static: bool, title: str) -> dict[str, Any]:
-        target = container if container is not None else self.container
-        container_id = None if static or not target else self._resolve_container(target)
-        return self.client.memories.add(content, container=container_id, static=static, title=title)
-
-    # ------------------------------------------------------------------ containers
-
-    def _resolve_container(self, value: str) -> str:
-        """A container id for ``value`` (an id or a Memory's name), from ``containers.list``."""
-        cached = self._container_ids.get(value)
-        if cached:
-            return cached
-        containers = self.client.containers.list().get("containers", [])
-        for c in containers:
-            if c.get("id") == value:
-                self._container_ids[value] = value
-                return value
-        wanted = value.strip().casefold()
-        for c in containers:
-            if str(c.get("name", "")).strip().casefold() == wanted:
-                self._container_ids[value] = c["id"]
-                return c["id"]
-        names = ", ".join(repr(c.get("name")) for c in containers) or "none"
-        raise ValueError(f"No Membase memory named {value!r} is in this key's reach (available: {names})")
+    def _save(self, content: str, title: str) -> dict[str, Any]:
+        """One note into the key's write target (Membase picks it; no request names a Memory)."""
+        return self.client.memories.add(content, title=title)
 
     # ------------------------------------------------------------------ tools
 
@@ -334,15 +306,14 @@ class MembaseMemoryStore(MemoryStore):
                     "Use when the answer may depend on the user's past, preferences or documents."
                 ),
             )
-            async def membase_search(query: str, container: str | None = None, limit: int | None = None) -> str:
+            async def membase_search(query: str, limit: int | None = None) -> str:
                 """Search Membase.
 
                 Args:
                     query: What to look for, in plain words.
-                    container: Optional name (or id) of one Memory to search; omit to search all.
                     limit: Optional maximum number of passages (1-50).
                 """
-                return await _tool_call(lambda: _format_search(store._search_raw(query, limit, container), query))
+                return await _tool_call(lambda: _format_search(store._search_raw(query, limit), query))
 
             tools.append(membase_search)
 
@@ -352,35 +323,18 @@ class MembaseMemoryStore(MemoryStore):
                 name="membase_save",
                 description=(
                     "Save something to the user's Membase memory. Only when the user asked you to remember "
-                    "it or plainly meant it to be kept; save their words, not your summary of the chat. "
-                    "Set standing_fact=true for a lasting fact about the user (goes to their profile). "
-                    "If the user has several Memories, name the one to save to."
+                    "it or plainly meant it to be kept; save their words, not your summary of the chat."
                 ),
             )
-            async def membase_save(content: str, container: str | None = None, standing_fact: bool = False) -> str:
+            async def membase_save(content: str) -> str:
                 """Save to Membase.
 
                 Args:
                     content: What to save, in the user's words.
-                    container: Name (or id) of the Memory to save to; needed when there are several.
-                    standing_fact: True for a lasting fact about the user, kept in their profile.
                 """
                 if not content or not content.strip():
                     return "Nothing to save: content is empty."
-
-                def save() -> str:
-                    try:
-                        return _format_saved(store._save(content, container, standing_fact, ""))
-                    except BadRequestError as error:
-                        if standing_fact or container or store.container:
-                            raise
-                        names = [str(c.get("name")) for c in store.client.containers.list().get("containers", [])]
-                        return (
-                            f"Membase needs to know which Memory to save to ({error.message}). "
-                            f"Ask the user, then call membase_save again with container set to one of: {names}"
-                        )
-
-                return await _tool_call(save)
+                return await _tool_call(lambda: _format_saved(store._save(content, "")))
 
             tools.append(membase_save)
 
@@ -389,17 +343,13 @@ class MembaseMemoryStore(MemoryStore):
             @tool(
                 name="membase_profile",
                 description=(
-                    "Read the user's Membase profile: standing facts about who they are and recent changes. "
-                    "Call once near the start of a conversation, optionally with a topic."
+                    "Read the user's Membase profile: standing statements about who they are (name, role, "
+                    "lasting preferences), newest first. Call once near the start of a conversation."
                 ),
             )
-            async def membase_profile(topic: str | None = None) -> str:
-                """Read the Membase profile.
-
-                Args:
-                    topic: Optional topic to pull relevant profile facts for.
-                """
-                return await _tool_call(lambda: _format_profile(store.client.profile(q=topic or None)))
+            async def membase_profile() -> str:
+                """Read the Membase profile facts."""
+                return await _tool_call(lambda: _format_profile(store.client.profile_facts.list()))
 
             tools.append(membase_profile)
 
@@ -434,40 +384,34 @@ def _translate_403(call: Callable[[], T]) -> T:
 
 def _to_entries(payload: dict[str, Any]) -> list[MemoryEntry]:
     entries: list[MemoryEntry] = []
-    for hit in payload.get("results") or []:
+    for hit in payload.get("items") or []:
         content = str(hit.get("content") or "").strip()
         if not content:
             continue
-        name = hit.get("container_name") or "Membase"
+        name = hit.get("memory_name") or "Membase"
         metadata = {k: v for k, v in hit.items() if k != "content" and v is not None}
         entries.append(MemoryEntry(content=f"[{name}] {content}", metadata=metadata or None))
-    for c in _unavailable(payload):
-        logger.warning("container=<%s>, reason=<%s> | Membase memory could not answer", c["name"], c["error"])
+    for name in _unavailable(payload):
+        logger.warning("memory=<%s> | Membase memory could not answer", name)
         entries.append(
             MemoryEntry(
-                content=f"[{c['name']}] This Membase memory could not answer the search: {c['error']}",
-                metadata={"container_name": c["name"], "container_id": c["id"], "error": c["error"]},
+                content=f"[{name}] This Membase memory could not answer the search.",
+                metadata={"memory_name": name, "reason": "error"},
             )
         )
     return entries
 
 
-def _unavailable(payload: dict[str, Any]) -> list[dict[str, str]]:
-    out = []
-    for c in payload.get("containers") or []:
-        if c.get("error"):
-            out.append(
-                {"id": str(c.get("id") or ""), "name": str(c.get("name") or c.get("id")), "error": str(c["error"])}
-            )
-    return out
+def _unavailable(payload: dict[str, Any]) -> list[str]:
+    """The Memories that could not answer (``partial`` with ``reason: error``). A Memory whose
+    passages only lost to ``limit`` (``truncated``) did answer."""
+    return [str(p.get("memory_name") or "a Memory") for p in payload.get("partial") or [] if p.get("reason") == "error"]
 
 
 def _format_search(payload: dict[str, Any], query: str) -> str:
-    hits = [h for h in payload.get("results") or [] if str(h.get("content") or "").strip()]
-    lines = [
-        f"{i}. [{h.get('container_name') or 'Membase'}] {str(h['content']).strip()}" for i, h in enumerate(hits, 1)
-    ]
-    errors = [f"- Memory '{c['name']}' could not answer: {c['error']}" for c in _unavailable(payload)]
+    hits = [h for h in payload.get("items") or [] if str(h.get("content") or "").strip()]
+    lines = [f"{i}. [{h.get('memory_name') or 'Membase'}] {str(h['content']).strip()}" for i, h in enumerate(hits, 1)]
+    errors = [f"- Memory '{name}' could not answer." for name in _unavailable(payload)]
     if not lines and not errors:
         return f"No Membase memory matched {query!r}."
     out = []
@@ -480,28 +424,23 @@ def _format_search(payload: dict[str, Any], query: str) -> str:
 
 def _format_saved(result: dict[str, Any] | None) -> str:
     result = result or {}
-    if result.get("static"):
-        return "Saved to the user's Membase profile as a standing fact."
+    names = sorted({str(x.get("memory_name")) for x in result.get("learning") or [] if x.get("memory_name")})
+    where = f" in {', '.join(names)}" if names else ""
+    status = result.get("status") or "pending"
+    if status == "succeeded":
+        return f"Saved to Membase{where} and learned (id={result.get('id')})."
     return (
-        "Saved to Membase. It is queued for learning and shows up in search once the Memory has "
-        f"learned it (memory_id={result.get('memory_id')}, status={result.get('status', 'queued')})."
+        f"Saved to Membase{where}. It shows up in search once the Memory has learned it "
+        f"(id={result.get('id')}, status={status})."
     )
 
 
 def _format_profile(result: dict[str, Any]) -> str:
-    sections = []
-    for key, title in (("static", "Standing facts"), ("dynamic", "Recently changed"), ("results", "On this topic")):
-        items = [_profile_item(x) for x in result.get(key) or []]
-        items = [x for x in items if x]
-        if items:
-            sections.append(f"{title}:\n" + "\n".join(f"- {x}" for x in items))
-    return "\n\n".join(sections) or "The Membase profile is empty."
-
-
-def _profile_item(item: Any) -> str:
-    if isinstance(item, dict):
-        return str(item.get("content") or item.get("fact") or item.get("text") or "").strip()
-    return str(item).strip()
+    facts = [str(f.get("content") or "").strip() for f in result.get("items") or []]
+    facts = [f for f in facts if f]
+    if not facts:
+        return "The Membase profile is empty."
+    return "About the user:\n" + "\n".join(f"- {f}" for f in facts)
 
 
 async def _tool_call(call: Callable[[], str]) -> str:
@@ -514,6 +453,8 @@ async def _tool_call(call: Callable[[], str]) -> str:
         return TIMEOUT_MESSAGE
     except BadRequestError as error:
         return f"Membase rejected the request: {error.message}"
+    except WriteTargetRequiredError:
+        return WRITE_TARGET_MESSAGE
     except UnprocessableEntityError as error:
         return (
             "The user's Membase memory cannot run right now (no working model or agent container; "
@@ -523,5 +464,3 @@ async def _tool_call(call: Callable[[], str]) -> str:
         return "Membase is busy for this account right now (rate limited); try again shortly."
     except MembaseError as error:
         return f"Membase error: {error}"
-    except ValueError as error:  # an unknown Memory name
-        return str(error)

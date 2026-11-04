@@ -111,20 +111,28 @@ def test_prefetch_injects_passages_citing_their_memory(manager, fake):
     (search,) = fake.calls("POST", "/v1/search")
     assert search.url.host == "api.app.membase.com"
     assert search.headers["authorization"] == f"Bearer {KEY}"
-    assert fake.body(search) == {"q": "what did we decide about the ledger database?", "limit": 5}
+    assert fake.body(search) == {"q": "what did we decide about the ledger database?", "mode": "full", "limit": 5}
     assert fake.timeout(search) == 8.0  # the default recall budget
 
 
-def test_prefetch_uses_the_configured_budget_and_default_container(manager, fake, home):
-    write_settings(home, container="travel", recall_budget_seconds=2.5, recall_limit=3)
+def test_prefetch_uses_the_configured_budget_and_names_no_memory(manager, fake, home):
+    write_settings(home, recall_budget_seconds=2.5, recall_limit=3)
     mgr, _ = manager()
     mgr.prefetch_all("where do I like to sit on planes?")
     mgr.prefetch_all("and on trains?")
-    assert len(fake.calls("GET", "/v1/containers")) == 1  # the name is resolved once, then cached
     searches = fake.calls("POST", "/v1/search")
-    assert [fake.body(r)["container"] for r in searches] == ["mv-travel", "mv-travel"]
+    assert all("container" not in fake.body(r) for r in searches)
     assert fake.body(searches[0])["limit"] == 3
     assert fake.timeout(searches[0]) == 2.5
+
+
+def test_a_retired_container_setting_is_called_out(manager, fake, home, caplog):
+    write_settings(home, container="Travel")
+    with caplog.at_level(logging.WARNING):
+        mgr, _ = manager()
+        mgr.prefetch_all("where do I like to sit?")
+    assert "`container` setting (and MEMBASE_CONTAINER) is no longer used" in caplog.text
+    assert "container" not in fake.body(fake.calls("POST", "/v1/search")[0])
 
 
 def test_recall_budget_never_exceeds_what_hermes_waits_for(manager, fake, home):
@@ -154,14 +162,15 @@ def test_a_slow_memory_never_holds_the_turn(manager, fake):
 
 
 def test_prefetch_reports_memories_that_could_not_answer(manager, fake):
-    fake.search_response = {"results": [], "containers": [
-        {"id": "mv-decisions", "name": "Project decisions"},
-        {"id": "mv-travel", "name": "Travel", "error": "no working model"},
+    fake.search_response = {"items": [], "partial": [
+        {"memory_name": "Travel", "reason": "error"},
+        {"memory_name": "Project decisions", "reason": "truncated"},
     ]}
     mgr, _ = manager()
     block = mgr.prefetch_all("where do I like to sit?")
     assert "No passage matched this turn." in block
-    assert "Travel (no working model)" in block
+    assert "absence of a passage proves nothing for: Travel" in block
+    assert "Project decisions" not in block  # truncated: it answered, its passages lost to the limit
     assert mgr.describe_recall() == ""  # nothing recalled, but the gap is stated
 
 
@@ -202,85 +211,71 @@ def test_recall_can_be_switched_off(manager, fake, home):
 # ---- tools --------------------------------------------------------------------------------------
 
 
-def test_search_tool_names_containers_and_uses_the_sdk_timeout(manager, fake):
+def test_search_tool_names_memories_and_uses_the_sdk_timeout(manager, fake):
     mgr, _ = manager()
-    out = tool(mgr, "membase_search", query="ledger", container="Project decisions", limit=2)
-    assert out["results"][0] == {"container": "Project decisions", "content": "We settled on Postgres for the ledger."}
+    out = tool(mgr, "membase_search", query="ledger", limit=2)
+    assert out["results"][0] == {"memory": "Project decisions", "content": "We settled on Postgres for the ledger."}
     search = fake.calls("POST", "/v1/search")[0]
-    assert fake.body(search) == {"q": "ledger", "container": "mv-decisions", "limit": 2}
+    assert fake.body(search) == {"q": "ledger", "mode": "full", "limit": 2}
     assert fake.timeout(search) == 90.0  # explicit calls wait out a cold start
 
 
 def test_search_tool_reports_unavailable_memories(manager, fake):
-    fake.search_response["containers"][1]["error"] = "dormant"
+    fake.search_response["partial"] = [{"memory_name": "Travel", "reason": "error"}]
     mgr, _ = manager()
     out = tool(mgr, "membase_search", query="seat")
-    assert out["unavailable"] == [{"container": "Travel", "error": "dormant"}]
+    assert out["unavailable"] == [{"memory": "Travel"}]
     assert "prove nothing" in out["note"]
 
 
-def test_save_tool_writes_a_note_to_the_named_memory(manager, fake):
+def test_no_tool_takes_a_memory_argument(manager):
+    mgr, provider = manager()
+    for schema in provider.get_tool_schemas():
+        assert not {"container", "static"} & set(schema["parameters"].get("properties", {})), schema["name"]
+
+
+def test_save_tool_writes_a_note_to_the_write_target(manager, fake):
     mgr, _ = manager()
-    out = tool(mgr, "membase_save", content="We moved the ledger launch to March.", container="project decisions")
-    assert out["saved"] is True and out["status"] == "queued" and out["document_id"] == "srcitem_1"
-    body = fake.body(fake.calls("POST", "/v1/memories")[0])
-    assert body == {"content": "We moved the ledger launch to March.", "static": False, "title": "",
-                    "container": "mv-decisions"}
+    out = tool(mgr, "membase_save", content="We moved the ledger launch to March.")
+    assert out["saved"] is True and out["status"] == "processing" and out["id"] == "doc_bm90ZQ"
+    assert out["memory"] == "Project decisions"
+    body = fake.body(fake.calls("POST", "/v1/memories/add")[0])
+    assert body == {"content": "We moved the ledger launch to March.", "title": ""}
 
 
-def test_save_tool_records_a_standing_fact_in_the_profile(manager, fake):
+def test_save_when_the_key_has_no_write_target(manager, fake):
+    fake.write_target = None
     mgr, _ = manager()
-    out = tool(mgr, "membase_save", content="I prefer dark mode.", static=True)
-    assert out["where"] == "profile" and out["status"] == "recorded"
-    body = fake.body(fake.calls("POST", "/v1/memories")[0])
-    assert body["static"] is True and "container" not in body
+    err = tool(mgr, "membase_save", content="Remember the ledger runs on Postgres.")["error"]
+    assert "several Memories and has no write target, so nothing was saved" in err
+    assert "Connect > Developer keys" in err
 
 
-def test_a_fact_the_built_in_memory_tool_keeps_about_the_user_reaches_the_profile(manager, fake):
-    """Hermes tells every provider when its built-in memory tool writes. What it records about
-    the user is mirrored into their Membase profile; the agent's own notes and removals are not."""
+def test_built_in_memory_writes_are_not_mirrored(manager, fake):
+    """The memory API has no standing-fact write, so what the built-in tool keeps stays Hermes's own."""
     mgr, _ = manager()
     mgr.on_memory_write("add", "user", "Favourite city: Lisbon.")
-    mgr.on_memory_write("add", "memory", "The deploy script lives in scripts/.")
-    mgr.on_memory_write("remove", "user", "Favourite city: Lisbon.")
-    (write,) = fake.calls("POST", "/v1/memories")
-    assert fake.body(write) == {"content": "Favourite city: Lisbon.", "static": True, "title": ""}
-
-
-def test_save_without_container_when_several_are_in_reach(manager, fake):
-    mgr, _ = manager()
-    out = tool(mgr, "membase_save", content="Remember the ledger runs on Postgres.")
-    assert "several Memories" in out["error"]
-    assert out["available"] == ["Project decisions", "Travel"]
+    assert fake.calls("POST", "/v1/memories/add") == []
 
 
 def test_save_with_a_read_only_key_is_refused_clearly(manager, fake):
-    fake.fail["/v1/memories"] = lambda r: fake.error(
+    fake.fail["/v1/memories/add"] = lambda r: fake.error(
         403, "tool 'add_memory' is not in this agent's capability profile")
     mgr, _ = manager()
-    err = tool(mgr, "membase_save", content="x", container="Travel")["error"]
+    err = tool(mgr, "membase_save", content="x")["error"]
     assert "403" in err and "narrowed or revoked" in err and "capability profile" in err
     assert KEY not in err
 
 
-def test_unknown_container_lists_what_is_in_reach(manager, fake):
-    mgr, _ = manager()
-    out = tool(mgr, "membase_search", query="x", container="Recipes")
-    assert "No Memory named 'Recipes'" in out["error"]
-    assert out["available"] == ["Project decisions", "Travel"]
-    assert fake.calls("POST", "/v1/search") == []
-
-
 def test_profile_tool(manager, fake):
     mgr, _ = manager()
-    out = tool(mgr, "membase_profile", query="travel")
-    assert out["static"] == ["Works on the ledger service."]
-    assert out["dynamic"] == ["Planning a trip to Lisbon."]
-    assert fake.calls("GET", "/v1/profile")[0].url.params["q"] == "travel"
+    out = tool(mgr, "membase_profile")
+    assert out == {"facts": ["Works on the ledger service.", "Planning a trip to Lisbon."]}
+    assert len(fake.calls("GET", "/v1/profile-facts")) == 1
 
 
 def test_profile_not_ticked_on_the_key(manager, fake):
-    fake.fail["/v1/profile"] = 403
+    fake.fail["/v1/profile-facts"] = 403
     mgr, _ = manager()
     assert "does not include the profile" in tool(mgr, "membase_profile")["error"]
 
@@ -299,42 +294,43 @@ def test_turns_are_not_captured_by_default(manager, fake):
     mgr, _ = manager()
     mgr.sync_all("my passport expires in May", "Noted.", session_id="s-1")
     assert mgr.flush_pending(5)
-    assert fake.calls("POST", "/v1/memories") == []
+    assert fake.calls("POST", "/v1/memories/add") == []
 
 
 def test_capture_is_opt_in(manager, fake, home):
-    write_settings(home, capture_turns="on", container="Travel")
+    write_settings(home, capture_turns="on")
     mgr, _ = manager()
     mgr.sync_all("my passport expires in May", "Noted, I will remind you in April.", session_id="s-1")
     assert mgr.flush_pending(5)
     mgr.sync_all("I prefer aisle seats on long flights", "Got it.", session_id="s-1")
     assert mgr.flush_pending(5)
-    writes = fake.calls("POST", "/v1/memories")
+    writes = fake.calls("POST", "/v1/memories/add")
     assert len(writes) == 2  # once per turn
     bodies = [fake.body(w) for w in writes]
     assert [b["content"] for b in bodies] == ["my passport expires in May", "I prefer aisle seats on long flights"]
     for body in bodies:  # the user's words only: no assistant text, no role labels
-        assert body["container"] == "mv-travel" and body["static"] is False
+        assert set(body) == {"content", "title"}
         assert "remind you" not in body["content"] and "Got it" not in body["content"]
         assert "User:" not in body["content"] and "Assistant:" not in body["content"]
 
 
 @pytest.mark.parametrize("context", ["cron", "subagent"])
 def test_capture_skips_unattended_runs(manager, fake, home, context):
-    write_settings(home, capture_turns=True, container="Travel")
+    write_settings(home, capture_turns=True)
     mgr, _ = manager(agent_context=context)
     mgr.sync_all("a scheduled report", "done", session_id="s-1")
     assert mgr.flush_pending(5)
-    assert fake.calls("POST", "/v1/memories") == []
+    assert fake.calls("POST", "/v1/memories/add") == []
 
 
 def test_capture_failure_is_logged_not_raised(manager, fake, home, caplog):
     write_settings(home, capture_turns=True)
+    fake.write_target = None
     mgr, _ = manager()
     with caplog.at_level(logging.WARNING):
         mgr.sync_all("remember my seat preference", "ok", session_id="s-1")
         assert mgr.flush_pending(5)
-    assert "Set `container`" in caplog.text
+    assert "no write target" in caplog.text
 
 
 # ---- setup --------------------------------------------------------------------------------------
@@ -344,13 +340,14 @@ def test_config_schema_and_save_config(home, load):
     provider = load()
     schema = {f["key"]: f for f in provider.get_config_schema()}
     assert schema["api_key"]["secret"] is True and schema["api_key"]["env_var"] == "MEMBASE_API_KEY"
-    assert {"base_url", "container", "recall_budget_seconds", "capture_turns"} <= set(schema)
+    assert {"base_url", "recall_budget_seconds", "capture_turns"} <= set(schema)
+    assert "container" not in schema
 
     provider.save_config({"container": "Travel", "recall_budget_seconds": "5", "capture_turns": "on",
                           "api_key": "must-not-be-written"}, str(home))
     path = home / "unibaseio-membase.json"
     saved = json.loads(path.read_text())
-    assert saved == {"capture_turns": True, "container": "Travel", "recall_budget_seconds": 5.0}
+    assert saved == {"capture_turns": True, "recall_budget_seconds": 5.0}
     assert stat.S_IMODE(path.stat().st_mode) == 0o600
     status = provider.get_status_config({})
     assert status["api_key"] == "set" and status["capture_turns"] == "on"
@@ -394,6 +391,80 @@ def test_client_for_without_a_user_id_uses_no_ones_memory(manager, fake, load):
     assert "no key for the person" in tool(mgr, "membase_search", query="x")["error"]
     assert fake.requests == []
 
+
+
+# ---- a host that leaves memory to prefetch (tools off, fast recall, the profile each turn) --------
+
+
+def user_store_provider(home: Path) -> None:
+    (home / "config.yaml").write_text("memory:\n  provider: unibaseio-membase\n  user_store: provider\n",
+                                      encoding="utf-8")
+
+
+def test_tools_can_be_switched_off(manager, monkeypatch):
+    """Memory left to prefetch: no turn spends a model call deciding whether to search or save."""
+    monkeypatch.setenv("MEMBASE_TOOLS", "off")
+    mgr, provider = manager()
+    assert provider.get_tool_schemas() == []
+    assert "membase_search" not in mgr.build_system_prompt()
+
+
+def test_fast_recall_is_one_round_with_more_passages(manager, fake, monkeypatch):
+    monkeypatch.setenv("MEMBASE_RECALL_MODE", "fast")
+    mgr, _ = manager()
+    mgr.prefetch_all("what did we decide about the ledger database?")
+    (search,) = fake.calls("POST", "/v1/search")
+    assert fake.body(search)["mode"] == "fast"
+    assert fake.body(search)["limit"] == 10, "the agent's own model judges more passages"
+
+
+def test_the_profile_is_recalled_beside_the_search_when_the_provider_keeps_it(manager, fake, home):
+    user_store_provider(home)
+    mgr, _ = manager()
+    block = mgr.prefetch_all("what did we decide about the ledger database?")
+    assert "the user's profile" in block and "- Works on the ledger service." in block
+    assert "- [Project decisions] We settled on Postgres for the ledger." in block
+    assert len(fake.calls("GET", "/v1/profile-facts")) == 1
+    assert "injected before each turn as data" in mgr.build_system_prompt()
+
+
+def test_a_profile_that_could_not_be_read_says_so(manager, fake, home):
+    user_store_provider(home)
+    fake.fail["/v1/profile-facts"] = 403
+    mgr, _ = manager()
+    block = mgr.prefetch_all("anything about me?")
+    assert "Not read this turn (this key may not read it)" in block
+    assert "do not assume it is empty" in block
+
+
+def test_the_profile_is_not_read_each_turn_by_default(manager, fake):
+    mgr, _ = manager()
+    mgr.prefetch_all("what did we decide about the ledger database?")
+    assert fake.calls("GET", "/v1/profile-facts") == []
+
+
+def test_a_fact_about_the_user_goes_to_the_profile(manager, fake, home):
+    user_store_provider(home)
+    _, provider = manager()
+    out = provider.record_user_fact("  Prefers tea to coffee. ")
+    assert out == {"recorded": True, "id": "pf_Mw", "created": True}
+    (add,) = fake.calls("POST", "/v1/profile-facts/add")
+    assert fake.body(add) == {"content": "Prefers tea to coffee."}
+
+
+@pytest.mark.parametrize("context", ["cron", "subagent"])
+def test_an_unattended_run_records_no_fact_about_the_user(manager, fake, context):
+    _, provider = manager(agent_context=context)
+    with pytest.raises(RuntimeError, match="does not write"):
+        provider.record_user_fact("Prefers tea.")
+    assert fake.calls("POST", "/v1/profile-facts/add") == []
+
+
+def test_a_refused_fact_raises_one_actionable_sentence(manager, fake):
+    fake.fail["/v1/profile-facts/add"] = 403
+    _, provider = manager()
+    with pytest.raises(RuntimeError, match="does not include the profile"):
+        provider.record_user_fact("Prefers tea.")
 
 def test_runs_in_the_plugin_host(home, load):
     """With plugins.isolation: host the provider's code runs in Hermes' plugin-host process."""

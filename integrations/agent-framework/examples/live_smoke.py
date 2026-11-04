@@ -5,7 +5,7 @@
 A real ``agent_framework.Agent`` runs with the Membase context provider and tools attached;
 its chat client is a stand-in that calls the tools the way a model would and prints what the
 model would have seen. Writes nothing unless MEMBASE_SMOKE_WRITE=1 (then it saves one note to
-MEMBASE_SMOKE_CONTAINER, a container id or name). Exits 0 without a key.
+the key's write target: a Read & write key that reaches one Memory). Exits 0 without a key.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ async def main() -> int:
     # MEMBASE_API_KEY from the environment; the host is the package's default unless MEMBASE_BASE_URL is set.
     client = Membase(base_url=os.environ.get("MEMBASE_BASE_URL") or DEFAULT_BASE_URL)
 
-    print("containers:", [c.get("name") for c in client.containers.list().get("containers", [])])
+    print("Memories in reach:", [m.get("name") for m in client.capabilities().get("memories") or []])
 
     calls: list[tuple[str, dict[str, Any]]] = [("membase_search", {"query": question, "limit": 5})]
     if os.environ.get("MEMBASE_SMOKE_PROFILE") == "1":
@@ -66,10 +66,7 @@ async def main() -> int:
         calls.append(
             (
                 "membase_save",
-                {
-                    "content": f"Smoke test note from agent-framework-membase at {time.ctime()}.",
-                    "container": os.environ.get("MEMBASE_SMOKE_CONTAINER"),
-                },
+                {"content": f"Smoke test note from agent-framework-membase at {time.ctime()}."},
             )
         )
     model = StandInModel(calls)

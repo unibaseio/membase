@@ -25,11 +25,11 @@ classifiers = [
 ]
 dependencies = [
     "agent-framework-core>=1.0.0,<2",
-    "unibaseio-membase>=0.3.2",
+    "unibaseio-membase>=0.4.0",
 ]
 
 [project.optional-dependencies]
-local = ["unibaseio-membase[local]>=0.3.2"]
+local = ["unibaseio-membase[local]>=0.4.0"]
 
 [project.urls]
 Homepage = "https://github.com/unibaseio/membase/tree/main/integrations/agent-framework"

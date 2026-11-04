@@ -1,5 +1,5 @@
 name: unibaseio-membase
-version: "0.1.0"
+version: "0.3.0"
 description: "Membase hosted memory: recalls passages from the user's Membase Memories before each turn (time-boxed, fail-open) and adds membase_search, membase_save and membase_profile. One API key per profile = one person."
 author: Unibase
 license: MIT

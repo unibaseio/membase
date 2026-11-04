@@ -2,7 +2,7 @@
 
 import { APIConnectionError, APITimeoutError, errorFor } from "./errors.js";
 
-export const VERSION = "0.3.4";
+export const VERSION = "0.4.0";
 export const DEFAULT_BASE_URL = "https://api.app.membase.com";
 /** The first search after a quiet spell can take up to a minute while the memory wakes. */
 export const DEFAULT_TIMEOUT_MS = 90_000;
@@ -24,27 +24,47 @@ export interface MembaseOptions {
   fetch?: Fetch;
 }
 
-export interface Container { id: string; name: string; description?: string; [k: string]: unknown }
-export interface ContainerList { containers: Container[] }
-export interface SearchHit { content: string; score?: number; container: string; container_name?: string; source?: string; [k: string]: unknown }
-export interface SearchResult { query: string; results: SearchHit[]; containers: Array<{ id: string; name: string; error?: string }> }
-export interface Profile { available?: boolean; ready?: boolean; static: string[]; dynamic: Array<{ id: number | string; content: string; updated_at?: string }>; results?: SearchHit[] }
-export interface Document { id: string; container: string; title?: string; learned?: boolean; [k: string]: unknown }
-export interface DocumentList { documents: Document[] }
-export interface AddDocumentResult { document_id: string | null; container: string; status: string; path?: string; learning_run?: { id: string; status: string } | null; [k: string]: unknown }
-export interface ConfirmationRequired { status: "confirmation_required"; verb: string; how: string; [k: string]: unknown }
+/** A Memory that could not answer (`error`) or whose passages all lost to `limit` (`truncated`); the others still answered. */
+export interface PartialMemory { memory_name: string; reason: "error" | "truncated" | string }
+/** One passage: a learned fact (`type: "memory"`, with its `mem_` id) or a passage from a document. */
+export interface SearchItem { type: "memory" | "document" | string; id?: string; content: string; score?: number | null; memory_name: string; title?: string; [k: string]: unknown }
+export interface SearchResult { items: SearchItem[]; partial: PartialMemory[] }
+/** Every list: the newest `limit`, whether more were left out, and the Memories that could not answer. */
+export interface Page<T> { items: T[]; has_more: boolean; partial: PartialMemory[] }
+/** A fact a Memory learned (`mem_…`). */
+export interface Memory { id: string; content: string; title?: string; memory_name: string; source_time?: string | null; recorded_at?: string | null; [k: string]: unknown }
+export type LearningStatus = "succeeded" | "processing" | "pending" | "failed";
+export interface Learning { memory_name: string; status: LearningStatus | string }
+/** Material handed in (`doc_…`): a file or page (`kind: "file"`) or the note a fact was written as (`kind: "note"`). */
+export interface Document { id: string; kind: "file" | "note" | string; title: string; memory_name: string; custom_id?: string; created_at?: string | null; updated_at?: string | null; learning?: Learning[]; [k: string]: unknown }
+/** A write's answer (HTTP 202): the document it landed as, and where its learning stands. */
+export interface Receipt { id: string | null; kind: "file" | "note" | string; status: LearningStatus | string; learning: Learning[] }
+export interface MediaMoment { t: number; end?: number | null; kind: string; text?: string; speaker?: string | null; thumb_url?: string | null; [k: string]: unknown }
+/** A photo or video (`med_…`). `moments` is a count in lists, the moments themselves from `media.get` and `media.search`. */
+export interface MediaItem { id: string; kind: string; filename?: string | null; memory_name: string; summary: string; duration?: number | null; created_at?: string | null; file_url?: string | null; thumb_url?: string | null; moments?: MediaMoment[] | number | null; [k: string]: unknown }
+export interface MediaSearchResult { items: MediaItem[]; partial: PartialMemory[] }
+/** A photo's or video's bytes (or a thumbnail's); `status` is 206 for the part a `range` asked for. */
+export interface MediaFile { content: Uint8Array; contentType: string; status: number; contentRange: string }
+/** A carried-out removal. */
+export interface Removed { id: string; status: "forgotten" | "deleted" | string }
+/** One standing statement about the user (`pf_…`): the account's, not a Memory's. */
+export interface ProfileFact { id: string; content: string; source_kind: "user_stated" | "imported" | "model_generated" | string; recorded_at?: string | null; [k: string]: unknown }
+/** `profileFacts.add`'s answer: the statement kept, and whether it is new (`false`: the same one was already kept). */
+export interface ProfileFactAdded extends ProfileFact { created: boolean }
+/** The user's standing rules for using their memory. */
+export interface Rules { citation_required: boolean; retention_notice: string; version: string; [k: string]: unknown }
+/** One answer from the memory, the Memory it came from, and the Memories that could not answer. */
+export interface Answer { answer: string; citations: Array<{ memory_name: string }>; partial: PartialMemory[] }
+/** What this key may do. Not permission: every call is still checked when made. */
+export interface Capabilities { actions: string[]; memories: Array<{ name: string; kind: string }>; rules: Rules; features: string[]; [k: string]: unknown }
 export type Json = Record<string, unknown>;
 
 export interface AddParams {
-  /** Which container reads it. */
-  container: string;
   /** The document's full text. */
   content?: string;
   /** A public web address to fetch instead of `content`. */
   url?: string;
   title?: string;
-  /** Your own tags, as an object. */
-  metadata?: Record<string, unknown>;
   /** Your own id; adding the same customId again is a no-op. */
   customId?: string;
 }
@@ -52,11 +72,14 @@ export interface AddParams {
 export interface SearchParams {
   /** The question, in natural language. */
   q: string;
-  /** One container id; omit to search every container in reach. */
-  container?: string;
-  /** How many passages in all, not per container (1–50). */
+  /** How many passages in all (1–50). */
   limit?: number;
+  /** `full` (default): the engine's whole retrieval. `fast`: one round, no model call. */
+  mode?: "full" | "fast";
 }
+
+const item = (collection: string, id: string) => `/v1/${collection}/${encodeURIComponent(id)}`;
+const flag = (confirm?: boolean) => (confirm ? "true" : "false");
 
 export class Membase {
   readonly baseUrl: string;
@@ -65,36 +88,83 @@ export class Membase {
   private readonly apiKey: string;
   private readonly fetchImpl: Fetch;
 
-  readonly containers = {
-    /** The containers this key may use — every one, for the account's owner. */
-    list: (): Promise<ContainerList> => this.request("GET", "/v1/containers"),
-  };
-
-  readonly documents = {
-    /** The documents the containers in reach have read, newest first, each with `learned`. */
-    list: (params: { container?: string } = {}): Promise<DocumentList> =>
-      this.request("GET", "/v1/documents", { query: { container: params.container } }),
-    /** One document, with whether its container has learned it yet. */
-    get: (documentId: string): Promise<Document> =>
-      this.request("GET", `/v1/documents/${encodeURIComponent(documentId)}`),
-    /** Remove one document everywhere; needs Full access and `confirm: true`. */
-    delete: (documentId: string, params: { confirm?: boolean } = {}): Promise<Json | ConfirmationRequired> =>
-      this.request("DELETE", `/v1/documents/${encodeURIComponent(documentId)}`, {
-        query: { confirm: params.confirm ? "true" : "false" },
-      }),
-  };
-
+  /** The facts the Memories in reach learned (`mem_…`). */
   readonly memories = {
-    /** Save one fact; `static: true` records a standing fact in the user's profile. */
-    add: (params: { content: string; container?: string; static?: boolean; title?: string }): Promise<Json> =>
-      this.request("POST", "/v1/memories", {
-        body: { content: params.content, container: params.container, static: params.static ?? false, title: params.title ?? "" },
+    /** The newest facts (`limit` 1–1000, default 100). */
+    list: (params: { limit?: number } = {}): Promise<Page<Memory>> =>
+      this.request("GET", "/v1/memories", { query: { limit: params.limit } }),
+    /** One fact, at any age. */
+    get: (memoryId: string): Promise<Memory> => this.request("GET", item("memories", memoryId)),
+    /** Save one fact into this key's write target; the receipt is the note it was written as. */
+    add: (params: { content: string; title?: string }): Promise<Receipt> =>
+      this.request("POST", "/v1/memories/add", { body: { content: params.content, title: params.title ?? "" } }),
+    /** Forget one learned fact. Needs Full access and `confirm: true`; otherwise `ConfirmationRequiredError` (428) and nothing changes. */
+    forget: (memoryId: string, params: { confirm?: boolean } = {}): Promise<Removed> =>
+      this.request("POST", `${item("memories", memoryId)}/forget`, { query: { confirm: flag(params.confirm) } }),
+  };
+
+  /** The material handed in (`doc_…`): files and pages, and the notes facts were written as. */
+  readonly documents = {
+    /** The documents, newest first; `kind` narrows to `file` or `note`. */
+    list: (params: { kind?: "file" | "note"; limit?: number } = {}): Promise<Page<Document>> =>
+      this.request("GET", "/v1/documents", { query: { kind: params.kind, limit: params.limit } }),
+    /** One document, with `learning`: how far each Memory got in learning it. */
+    get: (documentId: string): Promise<Document> => this.request("GET", item("documents", documentId)),
+    /** Hand in a document (its text, or a public `url`) to this key's write target. */
+    add: (params: AddParams): Promise<Receipt> =>
+      this.request("POST", "/v1/documents/add", {
+        body: { content: params.content, url: params.url, title: params.title ?? "", custom_id: params.customId ?? "" },
       }),
-    /** Forget one learned fact; needs `confirm: true`, like `documents.delete`. */
-    forget: (memoryId: string, params: { container?: string; confirm?: boolean } = {}): Promise<Json | ConfirmationRequired> =>
-      this.request("DELETE", `/v1/memories/${encodeURIComponent(memoryId)}`, {
-        query: { container: params.container, confirm: params.confirm ? "true" : "false" },
-      }),
+    /** Withdraw a document and what was learned from it. Needs Full access and `confirm: true`; otherwise `ConfirmationRequiredError` (428). */
+    delete: (documentId: string, params: { confirm?: boolean } = {}): Promise<Removed> =>
+      this.request("POST", `${item("documents", documentId)}/delete`, { query: { confirm: flag(params.confirm) } }),
+  };
+
+  /** Who the user is (`pf_…`): standing statements, the account's. Each needs the key's profile tick. */
+  readonly profileFacts = {
+    /** The statements, newest first (`limit` 1–1000, default 100), each with its `source_kind`. */
+    list: (params: { limit?: number } = {}): Promise<Page<ProfileFact>> =>
+      this.request("GET", "/v1/profile-facts", { query: { limit: params.limit } }),
+    /** Keep one statement about the user; `created: false` when the same one was already kept. */
+    add: (params: { content: string }): Promise<ProfileFactAdded> =>
+      this.request("POST", "/v1/profile-facts/add", { body: { content: params.content } }),
+    /** Forget one statement. Needs Full access and `confirm: true`; otherwise `ConfirmationRequiredError` (428) and nothing changes. */
+    forget: (factId: string, params: { confirm?: boolean } = {}): Promise<Removed> =>
+      this.request("POST", `${item("profile-facts", factId)}/forget`, { query: { confirm: flag(params.confirm) } }),
+  };
+
+  /** Photos and videos (`med_…`) in the media Memories in reach. */
+  readonly media = {
+    /** Newest first, each with its `summary`, `file_url` and `thumb_url`. */
+    list: (params: { limit?: number } = {}): Promise<Page<MediaItem>> =>
+      this.request("GET", "/v1/media", { query: { limit: params.limit } }),
+    /** One item with its `moments`: a video's shots and spoken lines. */
+    get: (mediaId: string): Promise<MediaItem> => this.request("GET", item("media", mediaId)),
+    /** Items matching what was seen or said in `q`, best first; `kind` is `image` or `video`. */
+    search: (params: { q: string; kind?: "image" | "video"; limit?: number }): Promise<MediaSearchResult> =>
+      this.request("POST", "/v1/media/search", { body: { q: params.q, kind: params.kind, limit: params.limit } }),
+    /**
+     * The item's file, or the thumbnail `thumb` (the name after `/thumbs/` in a `thumb_url`).
+     * `range` is an HTTP range (`bytes=0-1023`) and answers that part with status 206.
+     */
+    file: async (mediaId: string, params: { thumb?: string; range?: string } = {}): Promise<MediaFile> => {
+      const path = params.thumb
+        ? `${item("media", mediaId)}/thumbs/${params.thumb.split("/").map(encodeURIComponent).join("/")}`
+        : `${item("media", mediaId)}/file`;
+      const res = await this.request<Response>("GET", path, {
+        headers: params.range ? { Range: params.range } : undefined,
+        raw: true,
+      });
+      return {
+        content: new Uint8Array(await res.arrayBuffer()),
+        contentType: res.headers.get("content-type") ?? "application/octet-stream",
+        status: res.status,
+        contentRange: res.headers.get("content-range") ?? "",
+      };
+    },
+    /** Forget one item and remove its file. Needs Full access and `confirm: true`; otherwise `ConfirmationRequiredError` (428). */
+    delete: (mediaId: string, params: { confirm?: boolean } = {}): Promise<Removed> =>
+      this.request("POST", `${item("media", mediaId)}/delete`, { query: { confirm: flag(params.confirm) } }),
   };
 
   constructor(opts: MembaseOptions = {}) {
@@ -110,51 +180,44 @@ export class Membase {
     this.fetchImpl = opts.fetch ?? fetch;
   }
 
-  /** Hand a document (its text, or a public `url` to fetch) to a container. */
-  add(params: AddParams): Promise<AddDocumentResult> {
-    return this.request("POST", "/v1/documents", {
-      body: {
-        container: params.container,
-        content: params.content,
-        url: params.url,
-        title: params.title ?? "",
-        metadata: params.metadata,
-        custom_id: params.customId ?? "",
-      },
-    });
+  /** Hand in a document; the same as `documents.add`. */
+  add(params: AddParams): Promise<Receipt> {
+    return this.documents.add(params);
   }
 
-  /** Passages the containers hold on `q`, most relevant first, each naming its container. */
+  /** The passages the Memories in reach hold on `q`, most relevant first, each naming its `memory_name`. */
   search(params: SearchParams): Promise<SearchResult> {
-    return this.request("POST", "/v1/search", { body: { q: params.q, container: params.container, limit: params.limit } });
+    return this.request("POST", "/v1/search", { body: { q: params.q, limit: params.limit, mode: params.mode ?? "full" } });
   }
 
-  /** Who the user is: `static` (standing facts), `dynamic` (recently changed facts) and, with `q`, `results` relevant to the topic. */
-  profile(params: { q?: string } = {}): Promise<Profile> {
-    return this.request("GET", "/v1/profile", { query: { q: params.q } });
+  /** One answer to `message`, written by the memory from the Memories in reach; the passages are not returned. Needs a credential that holds `ask` (a marketplace buyer's). */
+  ask(params: { message: string }): Promise<Answer> {
+    return this.request("POST", "/v1/ask", { body: { message: params.message } });
   }
 
-  /** The exposed agent's answer to `message` (an agent-endpoint credential). */
-  ask(params: { message: string; model?: string }): Promise<Json> {
-    return this.request("POST", "/v1/ask", { body: { message: params.message, model: params.model } });
-  }
-
-  /** The user's standing rules for how their memory is used by this credential. */
-  rules(): Promise<Json> {
-    return this.request("GET", "/v1/rules");
+  /** What this key may do (`actions`: `search`, `memories.add`, …), the Memories it reaches (by name and kind) and the user's standing `rules`. */
+  capabilities(): Promise<Capabilities> {
+    return this.request("GET", "/v1/capabilities");
   }
 
   private async request<T>(
     method: string,
     path: string,
-    opts: { body?: Record<string, unknown>; query?: Record<string, string | number | undefined> } = {},
+    opts: {
+      body?: Record<string, unknown>;
+      query?: Record<string, string | number | undefined>;
+      headers?: Record<string, string>;
+      /** Answer with the response itself (a file's bytes) instead of its JSON. */
+      raw?: boolean;
+    } = {},
   ): Promise<T> {
     const url = new URL(this.baseUrl + path);
     for (const [k, v] of Object.entries(opts.query ?? {})) if (v !== undefined) url.searchParams.set(k, String(v));
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.apiKey}`,
-      Accept: "application/json",
+      Accept: opts.raw ? "*/*" : "application/json",
       "User-Agent": `unibaseio-membase-typescript/${VERSION}`,
+      ...opts.headers,
     };
     let body: string | undefined;
     if (opts.body !== undefined) {
@@ -182,6 +245,7 @@ export class Membase {
       }
       clearTimeout(timer);
       if (res.ok) {
+        if (opts.raw) return res as T;
         const text = await res.text();
         return (text ? JSON.parse(text) : null) as T;
       }

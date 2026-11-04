@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "membase-strands"
-version = "0.1.0"
+version = "0.2.0"
 description = "Membase memory for Strands Agents: a MemoryStore with time-boxed recall and deliberate search/save/profile tools."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,11 +26,11 @@ classifiers = [
 # injection, get_tools). The offline tests pass on 1.45.0, 1.50.0, 1.55.0 and 1.61.1.
 dependencies = [
     "strands-agents>=1.45.0",
-    "unibaseio-membase>=0.3.2",
+    "unibaseio-membase>=0.4.0",
 ]
 
 [project.optional-dependencies]
-local = ["unibaseio-membase[local]>=0.3.2"]
+local = ["unibaseio-membase[local]>=0.4.0"]
 
 [project.urls]
 Homepage = "https://membase.com"

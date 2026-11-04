@@ -9,6 +9,7 @@ from .errors import (
     APITimeoutError,
     AuthenticationError,
     BadRequestError,
+    ConfirmationRequiredError,
     ConflictError,
     InternalServerError,
     MembaseError,
@@ -16,6 +17,7 @@ from .errors import (
     PermissionDeniedError,
     RateLimitError,
     UnprocessableEntityError,
+    WriteTargetRequiredError,
 )
 
 __all__ = [
@@ -32,6 +34,8 @@ __all__ = [
     "NotFoundError",
     "ConflictError",
     "UnprocessableEntityError",
+    "WriteTargetRequiredError",
+    "ConfirmationRequiredError",
     "RateLimitError",
     "InternalServerError",
     "__version__",

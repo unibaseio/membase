@@ -11,10 +11,10 @@ from membase_dify.client import KEYS_PAGE, MembaseToolError, explain, open_clien
 
 class MembaseProvider(ToolProvider):
     def _validate_credentials(self, credentials: dict[str, Any]) -> None:
-        """Lists the key's containers: the cheapest call every Membase key may make."""
+        """Reads what the key may do: the cheapest call every Membase key may make."""
         try:
             with open_client(credentials) as client:
-                client.containers.list()
+                client.capabilities()
         except PermissionDeniedError as err:
             raise ToolProviderCredentialValidationError(
                 f"Membase refused this API key (403: {err.message}). It is mistyped, expired, "

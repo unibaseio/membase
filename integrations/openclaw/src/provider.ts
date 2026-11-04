@@ -29,8 +29,7 @@ const MAX_CACHED_PASSAGES = 500;
 
 interface CachedPassage {
   text: string;
-  container: string;
-  containerName: string;
+  memoryName: string;
 }
 
 /** Search hits are passages, not records with ids; `get` resolves passages this process returned. */
@@ -38,8 +37,7 @@ class PassageCache {
   private readonly entries = new Map<string, CachedPassage>();
 
   put(passage: CachedPassage): string {
-    const digest = createHash("sha256").update(`${passage.container}\n${passage.text}`).digest("hex").slice(0, 24);
-    const id = `${passage.container}:${digest}`;
+    const id = createHash("sha256").update(`${passage.memoryName}\n${passage.text}`).digest("hex").slice(0, 24);
     this.entries.delete(id);
     this.entries.set(id, passage);
     while (this.entries.size > MAX_CACHED_PASSAGES) {
@@ -99,7 +97,7 @@ export function createProviderRuntime(deps: {
           let outcome;
           try {
             outcome = await withBudget(
-              clients.recall().search({ q: query, limit, ...(config.container ? { container: config.container } : {}) }),
+              clients.recall().search({ q: query, limit }),
               config.recallBudgetMs,
             );
           } catch (error) {
@@ -117,29 +115,35 @@ export function createProviderRuntime(deps: {
           }
           const result = outcome.value;
           const hits: SearchPage["hits"] = [];
-          for (const hit of result.results ?? []) {
+          for (const hit of result.items ?? []) {
             const text = String(hit.content ?? "").trim();
             if (!text) continue;
             const score = typeof hit.score === "number" ? hit.score : undefined;
             // Membase ranks passages and may not score them; a passage without a score is kept.
             if (request.minScore !== undefined && score !== undefined && score < request.minScore) continue;
-            const containerName = hit.container_name || hit.container || "Membase";
-            const id = cache.put({ text, container: hit.container, containerName });
+            const memoryName = hit.memory_name || "Membase";
+            const id = cache.put({ text, memoryName });
             const reference = { providerId: PROVIDER_ID, id };
             hits.push({
               reference,
               excerpt: text,
               ...(score !== undefined ? { score } : {}),
               source: "memory",
-              citations: [{ label: `Membase: ${containerName}`, reference }],
+              citations: [{ label: `Membase: ${memoryName}`, reference }],
             });
           }
-          const failed = (result.containers ?? []).filter((c) => c.error);
-          if (failed.length) {
+          const partial = result.partial ?? [];
+          if (partial.length) {
             return {
               hits,
               coverage: "partial",
-              warning: failed.map((c) => `Memory "${c.name || c.id}" could not answer: ${c.error}`).join("; "),
+              warning: partial
+                .map((p) =>
+                  p.reason === "truncated"
+                    ? `Memory "${p.memory_name}" had more passages than fit`
+                    : `Memory "${p.memory_name}" could not answer`,
+                )
+                .join("; "),
             };
           }
           return { hits, coverage: "complete" };
@@ -160,7 +164,7 @@ export function createProviderRuntime(deps: {
             status: "ok",
             reference: request.reference,
             text: slice.join("\n"),
-            citations: [{ label: `Membase: ${passage.containerName}`, reference: request.reference }],
+            citations: [{ label: `Membase: ${passage.memoryName}`, reference: request.reference }],
             ...(end < lines.length ? { truncated: true, nextFrom: end + 1 } : {}),
             ...(request.from !== undefined ? { from } : {}),
             ...(request.lines !== undefined ? { lines: slice.length } : {}),
@@ -171,7 +175,7 @@ export function createProviderRuntime(deps: {
           // Readiness only; never partition content. Works for every authenticated caller.
           let outcome;
           try {
-            outcome = await withBudget(clients.recall().containers.list(), config.recallBudgetMs);
+            outcome = await withBudget(clients.recall().capabilities(), config.recallBudgetMs);
           } catch (error) {
             const unavailable =
               error instanceof NotConfiguredError ||

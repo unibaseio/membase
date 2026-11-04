@@ -17,7 +17,6 @@ DEFAULT_CONTAINER = "default"
 _PROFILE = "__profile__"
 _LIMIT_MAX = 50
 _LIMIT_FLOOR = 8
-_DYNAMIC = 10
 _ROLE_LINE = re.compile(r"(?m)^\s*\**\s*(user|assistant|human|ai|claude|chatgpt|you|me)\s*\**\s*:", re.I)
 
 
@@ -39,8 +38,9 @@ def _slug(name: str) -> str:
 
 
 class LocalBackend:
-    def __init__(self, root: str | os.PathLike | None = None) -> None:
+    def __init__(self, root: str | os.PathLike | None = None, write_target: str | None = None) -> None:
         self.root = Path(root or "~/.membase").expanduser()
+        self._write_target = write_target
         self._engines: dict[str, Any] = {}
         self._locks: dict[str, threading.RLock] = {}
         self._guard = threading.Lock()
@@ -103,7 +103,27 @@ class LocalBackend:
             return ids[0]
         if DEFAULT_CONTAINER in ids or create or not ids:
             return self._create(DEFAULT_CONTAINER) if create else DEFAULT_CONTAINER
-        raise LocalError(400, "bad_request", "several containers are in reach; name one")
+        raise LocalError(400, "validation", "several containers are in reach; name one")
+
+    def write_target(self) -> str:
+        """Where a write lands, since no request names a Memory: the one set with
+        ``MEMBASE_WRITE_TARGET`` (made when missing), else the store's only container, else a new
+        ``default`` one. A store with several and none set refuses, as the hosted API refuses a key
+        that reaches several Memories, rather than writing somewhere by guess."""
+        name = (self._write_target or os.environ.get("MEMBASE_WRITE_TARGET") or "").strip()
+        if name:
+            return self._resolve(name, create=True)
+        ids = self._ids()
+        if len(ids) == 1:
+            return ids[0]
+        if not ids:
+            return self._create(DEFAULT_CONTAINER)
+        raise LocalError(
+            422, "write_target_required",
+            f"this store holds {len(ids)} Memories and has no write target: set MEMBASE_WRITE_TARGET "
+            "to the name of the one writes go to",
+            {"memories_in_reach": len(ids)},
+        )
 
     def engine(self, cid: str):
         with self._guard:
@@ -144,20 +164,33 @@ class LocalBackend:
         return {"containers": [self._meta(cid) for cid in self._ids()]}
 
 
-    def _hits(self, cid: str, q: str, k: int) -> list[dict]:
+    def _hits(self, cid: str, q: str, k: int, fast: bool = False) -> list[dict]:
+        """A container's passages on ``q``: its facts and its documents' topics, alternating.
+        ``fast`` is one round of retrieval (keyword and vector, fused) with no model call, where
+        the full search lets the engine read the candidates and search again."""
         engine, _ = self.engine(cid)
         name = self._meta(cid)["name"]
+        if fast:
+            from membase_core.conversation.multiround import _recall_episodes
+
+            cfg = engine.retrieval_config
+            found = sorted(
+                _recall_episodes(engine.conn, engine.faiss, q, k, owner=cfg.owner, pool=cfg.recall_pool),
+                key=lambda c: c.rrf, reverse=True,
+            )
+        else:
+            found = engine.search(q).observations_top
         episodes = [
             {
                 "content": c.text,
-                "score": float(c.score or c.rrf),
+                "score": float(c.rrf if fast else (c.score or c.rrf)),
                 "container": cid,
                 "container_name": name,
                 "source": f"episode:{cid}:{c.id}",
                 "title": c.subject or "",
                 "session_date": c.valid_at,
             }
-            for c in engine.search(q).observations_top
+            for c in found
         ]
         docs: list[dict] = []
         if engine.list_documents(page_size=1).total:
@@ -175,17 +208,19 @@ class LocalBackend:
             merged += [lst[i] for lst in (episodes, docs) if i < len(lst)]
         return merged[:k]
 
-    def search(self, q: str, container: str | None = None, limit: int | None = None) -> dict:
+    def search(
+        self, q: str, container: str | None = None, limit: int | None = None, mode: str = "full"
+    ) -> dict:
         if not (q or "").strip():
-            raise LocalError(400, "bad_request", "q is required")
+            raise LocalError(400, "validation", "q is required")
         targets = [self._resolve(container)] if container else self._ids()
         if limit is not None and not 1 <= int(limit) <= _LIMIT_MAX:
-            raise LocalError(400, "bad_request", f"limit must be 1-{_LIMIT_MAX}")
+            raise LocalError(400, "validation", f"limit must be 1-{_LIMIT_MAX}")
         k = int(limit) if limit is not None else max(_LIMIT_FLOOR, len(targets))
         answers: list[tuple[str, list[dict], str | None]] = []
         for cid in targets:
             try:
-                answers.append((cid, self._hits(cid, q, k), None))
+                answers.append((cid, self._hits(cid, q, k, fast=mode == "fast"), None))
             except LocalError:
                 raise
             except Exception as e:  # noqa: BLE001 - one container failing is reported beside the rest
@@ -210,26 +245,96 @@ class LocalBackend:
             ],
         }
 
-    def profile(self, q: str | None = None) -> dict:
-        out: dict[str, Any] = {"available": True, "ready": True, "static": [], "dynamic": []}
-        if (self._dir(_PROFILE) / "memory.db").exists():
-            engine, _ = self.engine(_PROFILE)
-            out["static"] = [p["description"] for p in engine.profile() if p["category"] == "static"]
-        recent: list[dict] = []
-        for cid in self._ids():
-            engine, _ = self.engine(cid)
-            recent += [
-                {"id": f"{cid}:{e['id']}", "content": e["content"], "updated_at": e["created_at"],
-                 "title": e["title"], "session_date": e["session_date"]}
-                for e in engine.episodes(limit=_DYNAMIC)
-            ]
-        out["dynamic"] = sorted(recent, key=lambda e: str(e["updated_at"] or ""), reverse=True)[:_DYNAMIC]
-        if (q or "").strip():
-            out["results"] = self.search(q or "")["results"]
-        return out
+    # ---- the user's profile: standing statements, the store's rather than a container's -------
 
-    def rules(self) -> dict:
-        return {"rules": [], "local": True}
+    def profile_facts(self, limit: int = 100) -> dict:
+        """The statements, newest first: ``{items: [{id, content, source_kind, updated_at}],
+        has_more}``; ``id`` is the engine's, stable for the statement's life."""
+        if not (self._dir(_PROFILE) / "memory.db").exists():
+            return {"items": [], "has_more": False}
+        engine, _ = self.engine(_PROFILE)
+        return engine.profile_facts(limit=limit)
+
+    def add_profile_fact(self, content: str) -> dict:
+        """Keep one statement the user made; the same text again keeps the one there
+        (``created: False``)."""
+        if not (content or "").strip():
+            raise LocalError(400, "validation", "a profile fact needs content")
+        engine, lock = self.engine(_PROFILE)
+        with lock:
+            return engine.add_profile_fact(content.strip(), kind="user_stated")
+
+    def forget_profile_fact(self, fact_id: int, confirm: bool = False) -> dict:
+        """Forget one statement, durably, before answering."""
+        missing = LocalError(404, "not_found", "profile fact not found", {"id": fact_id})
+        if not (self._dir(_PROFILE) / "memory.db").exists():
+            raise missing
+        engine, lock = self.engine(_PROFILE)
+        with lock:
+            found = next((f for f in engine.profile_facts(limit=100000)["items"] if f["id"] == fact_id), None)
+            if found is None:
+                raise missing
+            if not confirm:
+                return self._confirmation_required(
+                    "forget_profile_fact", {"content": found["content"]},
+                    "Pass confirm=true to forget this profile fact.",
+                )
+            engine.forget_profile_fact(fact_id)
+        return {"status": "forgotten", "id": fact_id}
+
+    # ---- facts: what each container learned -------------------------------------------------
+
+    @staticmethod
+    def _fact_row(cid: str, name: str, e: dict) -> dict:
+        return {
+            "id": f"{cid}:{e['id']}",
+            "content": e.get("content") or "",
+            "title": e.get("title") or "",
+            "container": cid,
+            "container_name": name,
+            "source_time": e.get("session_date"),
+            "recorded_at": e.get("created_at"),
+        }
+
+    def facts(self, limit: int) -> dict:
+        """The newest ``limit`` facts across the containers, newest by when they happened. Each
+        container is asked for one more than ``limit``, so ``has_more`` says whether any were
+        left out; one that cannot answer is named in ``containers`` beside the rest."""
+        rows: list[tuple] = []
+        containers: list[dict] = []
+        for cid in self._ids():
+            name = self._meta(cid)["name"]
+            try:
+                engine, _ = self.engine(cid)
+                found = engine.episodes(limit=limit + 1)
+            except LocalError:
+                raise
+            except Exception as e:  # noqa: BLE001 - one container failing is reported beside the rest
+                containers.append({"id": cid, "name": name, "error": f"{type(e).__name__}: {e}"})
+                continue
+            containers.append({"id": cid, "name": name})
+            rows += [(str(e.get("session_date") or ""), int(e["id"]), cid, self._fact_row(cid, name, e))
+                     for e in found]
+        rows.sort(key=lambda r: r[:3], reverse=True)
+        return {"memories": [r[-1] for r in rows[:limit]], "has_more": len(rows) > limit,
+                "containers": containers}
+
+    def _episode(self, memory_id: str) -> tuple[str, int, dict]:
+        cid, _, raw = (memory_id or "").rpartition(":")
+        if not cid or not raw.isdigit() or cid not in self._ids():
+            raise LocalError(404, "not_found", "memory not found", {"memory_id": memory_id})
+        engine, _ = self.engine(cid)
+        found = next((e for e in engine.episodes(limit=100000) if e["id"] == int(raw)), None)
+        if found is None:
+            raise LocalError(404, "not_found", "memory not found", {"memory_id": memory_id})
+        return cid, int(raw), found
+
+    def fact(self, memory_id: str) -> dict:
+        """One fact by its ``<container>:<n>`` id, at any age."""
+        cid, _, e = self._episode(memory_id)
+        return self._fact_row(cid, self._meta(cid)["name"], e)
+
+    # ---- documents: the material handed in ----------------------------------------------------
 
     def _sidecar(self, cid: str) -> Path:
         return self._dir(cid) / "documents.json"
@@ -237,6 +342,29 @@ class LocalBackend:
     def _doc_meta(self, cid: str) -> dict:
         p = self._sidecar(cid)
         return json.loads(p.read_text()) if p.exists() else {}
+
+    def _notes_path(self, cid: str) -> Path:
+        """The facts added one by one, as the notes they were written as (a note is a document,
+        as it is hosted): its id is the conversation the engine learned it from."""
+        return self._dir(cid) / "notes.json"
+
+    def _notes(self, cid: str) -> dict:
+        p = self._notes_path(cid)
+        return json.loads(p.read_text()) if p.exists() else {}
+
+    @staticmethod
+    def _note_row(cid: str, note_id: str, n: dict) -> dict:
+        return {
+            "id": note_id,
+            "title": n.get("title") or "",
+            "kind": "document",
+            "status": "learned",
+            "container": cid,
+            "custom_id": "",
+            "metadata": {"kind": "memory"},
+            "created_at": n.get("created_at"),
+            "updated_at": n.get("created_at"),
+        }
 
     def _document_row(self, cid: str, d: Any, meta: dict) -> dict:
         m = meta.get(d.doc_id, {})
@@ -265,30 +393,33 @@ class LocalBackend:
                 if page * 100 >= listing.total:
                     break
                 page += 1
+            rows += [self._note_row(cid, nid, n) for nid, n in self._notes(cid).items()]
         rows.sort(key=lambda r: str(r["created_at"] or ""), reverse=True)
         return {"documents": rows}
 
-    def _find_document(self, document_id: str) -> tuple[str, Any]:
+    def _find_document(self, document_id: str) -> tuple[str, dict, Any]:
+        """``(container, row, the engine's document or None for a note)``."""
         from membase_core import DocumentNotFoundError
 
         for cid in self._ids():
+            note = self._notes(cid).get(document_id)
+            if note is not None:
+                return cid, self._note_row(cid, document_id, note), None
             engine, _ = self.engine(cid)
             try:
-                return cid, engine.get_document(document_id)
+                d = engine.get_document(document_id)
             except DocumentNotFoundError:
                 continue
+            return cid, self._document_row(cid, d, self._doc_meta(cid)), d
         raise LocalError(404, "not_found", "document not found", {"document_id": document_id})
 
     def document(self, document_id: str) -> dict:
-        cid, d = self._find_document(document_id)
-        row = self._document_row(cid, d, self._doc_meta(cid))
-        row.update({
-            "learned": True,
-            "summary": d.summary,
-            "topics": [{"id": t.topic_id, "path": t.topic_path, "summary": t.summary} for t in d.topics],
-        })
+        _, row, d = self._find_document(document_id)
+        row["learned"] = True
+        if d is not None:
+            row["summary"] = d.summary
+            row["topics"] = [{"id": t.topic_id, "path": t.topic_path, "summary": t.summary} for t in d.topics]
         return row
-
 
     def add_document(
         self,
@@ -300,7 +431,7 @@ class LocalBackend:
         custom_id: str = "",
     ) -> dict:
         if (content is None) == (url is None):
-            raise LocalError(400, "bad_request", "give exactly one of content and url")
+            raise LocalError(400, "validation", "give exactly one of content and url")
         from membase_core import DuplicateDocumentError
 
         cid = self._resolve(container, create=True)
@@ -356,74 +487,69 @@ class LocalBackend:
         text = f"{title}\n\n{content}" if title else content
         return [{"role": "user", "content": text}]
 
-    def add_memory(
-        self, content: str, container: str | None = None, static: bool = False, title: str = ""
-    ) -> dict:
+    def add_memory(self, content: str, container: str | None = None, title: str = "") -> dict:
         if not (content or "").strip():
-            raise LocalError(400, "bad_request", "content is required")
-        if static:
-            engine, lock = self.engine(_PROFILE)
-            with lock:
-                engine.add_profile_fact(content.strip())
-            return {"static": True, "status": "recorded", "content": content}
+            raise LocalError(400, "validation", "content is required")
         cid = self._resolve(container, create=True)
         engine, lock = self.engine(cid)
         sid = f"mem-{uuid.uuid4().hex[:12]}"
+        now = _now()
         with lock:
-            result = engine.ingest_session(sid, _now(), self._turns(content, title))
+            result = engine.ingest_session(sid, now, self._turns(content, title))
             engine.save()
             ids = [e["id"] for e in engine.episodes(limit=1000) if e["session_id"] == sid]
+            notes = self._notes(cid)
+            notes[sid] = {"title": title, "created_at": now}
+            self._notes_path(cid).write_text(json.dumps(notes))
         memory_ids = [f"{cid}:{i}" for i in sorted(ids)]
         return {
+            "document_id": sid,
             "memory_id": memory_ids[0] if memory_ids else None,
             "memory_ids": memory_ids,
             "container": cid,
             "status": "learned",
-            "static": False,
             "extracted": result.counts,
         }
 
     @staticmethod
-    def _confirmation_required(verb: str, target: dict) -> dict:
-        return {
-            "status": "confirmation_required",
-            "verb": verb,
-            **target,
-            "how": "Pass confirm=true to remove it.",
-        }
+    def _confirmation_required(verb: str, target: dict, how: str = "Pass confirm=true to remove it.") -> dict:
+        return {"status": "confirmation_required", "verb": verb, **target, "how": how}
 
     def delete_document(self, document_id: str, confirm: bool = False) -> dict:
-        cid, d = self._find_document(document_id)
-        target = {"document_id": document_id, "title": d.title}
-        if not confirm:
-            return self._confirmation_required("delete_document", target)
-        engine, lock = self.engine(cid)
-        with lock:
-            res = engine.delete_document(document_id)
-            meta = self._doc_meta(cid)
-            if meta.pop(document_id, None) is not None:
-                self._sidecar(cid).write_text(json.dumps(meta))
-            engine.save()
-        return {"status": "deleted", "document_id": document_id, "row_deleted": True,
-                "removed_topics": getattr(res, "deleted_topics", None)}
-
-    def _parse_memory_id(self, memory_id: str, container: str | None) -> tuple[str, int]:
-        cid, _, raw = memory_id.rpartition(":")
-        cid = cid or (self._resolve(container) if container else "")
-        if not cid or not raw.isdigit() or not self._exists(cid):
-            raise LocalError(404, "not_found", "memory not found", {"memory_id": memory_id})
-        return cid, int(raw)
-
-    def forget_memory(self, memory_id: str, container: str | None = None, confirm: bool = False) -> dict:
-        cid, eid = self._parse_memory_id(memory_id, container)
-        engine, lock = self.engine(cid)
-        found = next((e for e in engine.episodes(limit=100000) if e["id"] == eid), None)
-        if found is None:
-            raise LocalError(404, "not_found", "memory not found", {"memory_id": memory_id})
+        """Withdraw a document and what was learned from it: a file's topics, or the facts a note
+        taught."""
+        cid, row, d = self._find_document(document_id)
+        target = {"document_id": document_id, "title": row["title"]}
         if not confirm:
             return self._confirmation_required(
-                "forget_memory", {"memory_id": memory_id, "content": found["content"]}
+                "delete_document", target, "Pass confirm=true to delete this document."
             )
+        engine, lock = self.engine(cid)
+        with lock:
+            if d is None:
+                for e in engine.episodes(limit=100000):
+                    if e.get("session_id") == document_id:
+                        engine.forget(e["id"])
+                notes = self._notes(cid)
+                notes.pop(document_id, None)
+                self._notes_path(cid).write_text(json.dumps(notes))
+            else:
+                engine.delete_document(document_id)
+                meta = self._doc_meta(cid)
+                if meta.pop(document_id, None) is not None:
+                    self._sidecar(cid).write_text(json.dumps(meta))
+            engine.save()
+        return {"status": "deleted", "document_id": document_id}
+
+    def forget_memory(self, memory_id: str, confirm: bool = False) -> dict:
+        """Forget one learned fact; the note or document it was learned from stays."""
+        cid, eid, found = self._episode(memory_id)
+        if not confirm:
+            return self._confirmation_required(
+                "forget_memory", {"memory_id": memory_id, "content": found["content"]},
+                "Pass confirm=true to forget this memory.",
+            )
+        engine, lock = self.engine(cid)
         with lock:
             engine.forget(eid)
             engine.save()
@@ -442,25 +568,18 @@ class LocalBackend:
                 best, best_score = cid, score
         return best
 
-    def ask(self, message: str, model: str | None = None, container: str | None = None) -> dict:
+    def ask(self, message: str) -> dict:
+        """One answer, written by the engine from the container whose facts match ``message``
+        best: ``{answer, container}`` (``container`` None when the store has none)."""
         if not (message or "").strip():
-            raise LocalError(400, "bad_request", "message is required")
-        cid = self._resolve(container) if container else self._best_container(message)
+            raise LocalError(400, "validation", "message is required")
+        cid = self._best_container(message)
         if cid is None or not self._exists(cid):
-            return {"answer": "Not answerable from memory.", "citations": [], "container": cid}
+            return {"answer": "Not answerable from memory.", "container": None}
         engine, lock = self.engine(cid)
         with lock:
-            previous = engine.reader_model
-            engine.reader_model = model or previous
-            try:
-                detail = engine.answer_detail(message)
-            finally:
-                engine.reader_model = previous
-        return {
-            "answer": detail.answer,
-            "citations": [c.text for c in detail.retrieval.observations_top[:5]],
-            "container": cid,
-        }
+            detail = engine.answer_detail(message)
+        return {"answer": detail.answer, "container": cid}
 
 
     def agent_ingest(self, messages: list[dict], *, agent_id: str, session_id: str | None = None,

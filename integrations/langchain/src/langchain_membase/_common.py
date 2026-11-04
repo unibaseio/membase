@@ -16,6 +16,7 @@ from membase.errors import (
     APITimeoutError,
     MembaseError,
     PermissionDeniedError,
+    WriteTargetRequiredError,
 )
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
@@ -141,6 +142,11 @@ def _langgraph_context() -> Any:
 
 def describe_error(e: BaseException) -> str:
     """One actionable sentence for the model and the logs."""
+    if isinstance(e, WriteTargetRequiredError):
+        return (
+            "This Membase key reaches several Memories and has no write target, so nothing was "
+            "saved; give the key a single Memory under Connect › Developer keys in the Membase app."
+        )
     if isinstance(e, PermissionDeniedError):
         return (
             f"Membase refused this request (403): {e.message}. This Membase key was narrowed or "
@@ -160,19 +166,28 @@ def describe_error(e: BaseException) -> str:
 
 
 def unavailable(resp: Mapping[str, Any]) -> list[str]:
-    """``name: error`` for every Memory that could not answer a search."""
-    out = []
-    for c in resp.get("containers") or []:
-        if c.get("error"):
-            out.append(f"{c.get('name') or c.get('id')}: {c['error']}")
-    return out
+    """The names of the Memories that could not answer a search (``partial``, reason ``error``)."""
+    return [
+        str(p.get("memory_name") or "a Memory")
+        for p in resp.get("partial") or []
+        if p.get("reason") == "error"
+    ]
+
+
+def truncated(resp: Mapping[str, Any]) -> list[str]:
+    """The names of the Memories whose passages all lost to the limit (reason ``truncated``)."""
+    return [
+        str(p.get("memory_name") or "a Memory")
+        for p in resp.get("partial") or []
+        if p.get("reason") == "truncated"
+    ]
 
 
 def format_passages(results: list[Mapping[str, Any]]) -> str:
-    """One line per passage, each citing the Memory (container) it came from."""
+    """One line per passage, each citing the Memory it came from."""
     lines = []
     for r in results:
-        name = r.get("container_name") or r.get("container") or "Membase"
+        name = r.get("memory_name") or "Membase"
         content = str(r.get("content") or "").strip()
         if content:
             lines.append(f"- [{name}] {content}")
@@ -181,11 +196,17 @@ def format_passages(results: list[Mapping[str, Any]]) -> str:
 
 def format_search(resp: Mapping[str, Any]) -> str:
     """Passages with their Memory, plus any Memory that could not answer (never 'no memory')."""
-    body = format_passages(resp.get("results") or [])
+    body = format_passages(resp.get("items") or [])
     failed = unavailable(resp)
-    note = ""
+    cut = truncated(resp)
+    notes = []
     if failed:
-        note = "These Memories could not answer, so what they hold is unknown: " + "; ".join(failed)
+        notes.append(
+            "These Memories could not answer, so what they hold is unknown: " + "; ".join(failed)
+        )
+    if cut:
+        notes.append("These Memories had passages that did not fit the limit: " + "; ".join(cut))
+    note = " ".join(notes)
     if body:
         return body + (f"\n\n{note}" if note else "")
     if note:

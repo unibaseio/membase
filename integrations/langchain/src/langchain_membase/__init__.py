@@ -17,7 +17,7 @@ from .tools import (
 if TYPE_CHECKING:
     from .middleware import MembaseRecallMiddleware
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "DEFAULT_RECALL_TIMEOUT",

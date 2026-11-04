@@ -16,10 +16,13 @@ no memory plugin type, so memory is offered as tools with provider credentials.
 - `plugin/membase_dify/client.py` builds the client from the workspace credentials (API key,
   optional base URL limited to HTTPS on `membase.com` / `membase.ai` / `membase.io`) and turns SDK errors into
   messages: a `403` says the key was revoked, narrowed or is read-only and must not be retried.
-- `plugin/provider/membase.py` validates credentials by listing the key's containers.
+- `plugin/provider/membase.py` validates credentials by reading the key's capabilities
+  (`GET /v1/capabilities`).
 - Tools: `plugin/tools/*.yaml` (en_US + zh_Hans labels, descriptions written for a model) and
-  `*.py`. Each returns a text message (passages cited as `[container name] content`) and a JSON
-  message. A container that could not answer a search is reported, not shown as "no memory".
+  `*.py`. Each returns a text message (passages cited as `[Memory name] content`, from each
+  passage's `memory_name`) and a JSON message. A Memory that could not answer a search (the
+  search's `partial`) is reported, not shown as "no memory". No call names a Memory: a search
+  covers every Memory the key reaches, a save lands in the key's write target.
 
 ## Develop
 
@@ -47,8 +50,8 @@ mkdir -p .cache
 gh release download -R langgenius/dify-plugin-daemon --pattern dify-plugin-linux-amd64 --dir .cache
 chmod +x .cache/dify-plugin-linux-amd64
 find plugin -name __pycache__ -prune -exec rm -rf {} +
-.cache/dify-plugin-linux-amd64 plugin package ./plugin -o membase-0.0.1.difypkg
-scripts/precheck.sh membase-0.0.1.difypkg <pr-body.md>   # the dify-plugins pre-check CI, locally
+.cache/dify-plugin-linux-amd64 plugin package ./plugin -o membase-0.1.0.difypkg
+scripts/precheck.sh membase-0.1.0.difypkg <pr-body.md>   # the dify-plugins pre-check CI, locally
 ```
 
 To try it in a Dify instance before publishing, use remote debugging: Dify's Plugins page shows a

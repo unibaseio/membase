@@ -2,13 +2,13 @@
 
 [Membase](https://membase.com) long-term memory for LangChain and LangGraph (Python).
 
-Membase keeps a person's memory in their own account: named **Memories** (containers) that
-learn from their notes, files and conversations, plus a **profile** of standing facts. This
-package gives a LangChain app three ways to use it:
+Membase keeps a person's memory in their own account: named **Memories** that learn from
+their notes, files and conversations, plus a **profile** of standing statements about them.
+This package gives a LangChain app three ways to use it:
 
 | Piece | LangChain type | What it does |
 |---|---|---|
-| `MembaseRetriever` | `BaseRetriever` | a Membase search as `Document`s, each citing its Memory in `metadata["container_name"]` |
+| `MembaseRetriever` | `BaseRetriever` | a Membase search as `Document`s, each citing its Memory in `metadata["memory_name"]` |
 | `MembaseToolkit` (`membase_tools()`): `MembaseSearchTool`, `MembaseSaveTool`, `MembaseProfileTool` | `BaseToolkit` / `BaseTool` | agent tools: search, save (only when the user asks), read the profile |
 | `MembaseRecallMiddleware` | LangChain v1 `AgentMiddleware` | time-boxed recall added to the system message before the model call of a `create_agent` agent |
 
@@ -31,7 +31,9 @@ export MEMBASE_API_KEY=mbk_...
 ```
 
 A **Read** key can search and read the profile (if its owner ticked it); saving needs a
-**Read & write** key. One key is one person's account.
+**Read & write** key with a write target (a key that reaches one Memory saves there; one that
+reaches several is refused, and nothing is written somewhere by guess). One key is one
+person's account. Requires `unibaseio-membase>=0.4.0`.
 
 ## Retriever
 
@@ -41,15 +43,17 @@ from langchain_membase import MembaseRetriever
 retriever = MembaseRetriever(k=5)                     # MEMBASE_API_KEY from the environment
 docs = retriever.invoke("what did we decide about the ledger")
 for d in docs:
-    print(d.metadata["container_name"], "·", d.page_content)
+    print(d.metadata["memory_name"], "·", d.page_content)
 ```
 
-* `k` (1–50) is the number of passages in all; unset lets Membase cover every Memory in reach.
-* `container="mv-…"` limits the search to one Memory (its id from `client.containers.list()`).
-  Both can also be passed per call: `retriever.invoke(q, k=3, container="mv-…")`.
-* If no passage comes back **and** some Memory could not answer (no model, dormant), the
-  retriever raises `MembaseUnavailableError` instead of returning `[]`: that is not evidence of
-  "no memory". When some Memories answered, it returns their passages and logs the rest.
+* A search covers every Memory the key reaches; `k` (1–50) is the number of passages in all,
+  also per call: `retriever.invoke(q, k=3)`.
+* Each `Document`'s `metadata` is the search item without its text: `memory_name`, `type`
+  (`memory` for a learned fact, with its `mem_…` `id`, or `document`), `score` and `title`.
+* If no passage comes back **and** some Memory could not answer (the response's `partial`),
+  the retriever raises `MembaseUnavailableError` instead of returning `[]`: that is not
+  evidence of "no memory". When some Memories answered, it returns their passages and logs
+  the rest.
 * A `403` (`membase.PermissionDeniedError`) means the key's owner narrowed or revoked it; do
   not retry with that key.
 
@@ -60,7 +64,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 
 def cite(docs):
-    return "\n".join(f"[{d.metadata['container_name']}] {d.page_content}" for d in docs)
+    return "\n".join(f"[{d.metadata['memory_name']}] {d.page_content}" for d in docs)
 
 prompt = ChatPromptTemplate.from_template("Memory:\n{memory}\n\nQuestion: {question}")
 chain = {"memory": retriever | cite, "question": RunnablePassthrough()} | prompt | llm
@@ -78,12 +82,12 @@ agent.invoke({"messages": [{"role": "user", "content": "What did we pick for the
 
 | Tool | Arguments | Notes |
 |---|---|---|
-| `membase_search` | `query`, optional `container` (a Memory's **name**) | passages as `- [Memory name] text`; the raw response is the `ToolMessage` artifact; Memories that could not answer are reported |
-| `membase_save` | `content` (the user's words), `static`, optional `container` | the description tells the model to save **only when the user asks**; `static=true` records a standing fact in the profile; with several Memories in reach it needs a `container` (or a default `container=` id on the tool) and says which names exist |
-| `membase_profile` | optional `topic` | standing and recently changed facts; only for a key whose owner ticked the profile |
+| `membase_search` | `query` | passages from every Memory in reach as `- [Memory name] text`; the raw response is the `ToolMessage` artifact; Memories that could not answer (or whose passages did not fit `k`) are reported |
+| `membase_save` | `content` (the user's words) | the description tells the model to save **only when the user asks**; the fact lands in the key's write target; a key with no write target (it reaches several Memories) gets a clear refusal and nothing is saved |
+| `membase_profile` | none | the profile facts: standing statements about who the user is, newest first; only for a key whose owner ticked **Your profile** |
 
-`MembaseToolkit(save=False, profile=False)` (or `membase_tools(client, save=False, profile=False)`) leaves tools out; `container=` and `k=` set
-defaults. Errors come back as the tool's answer (`handle_tool_error=True`), so the model can
+`MembaseToolkit(save=False, profile=False)` (or `membase_tools(client, save=False, profile=False)`) leaves tools out; `k=` sets
+the number of passages. Errors come back as the tool's answer (`handle_tool_error=True`), so the model can
 tell the user, e.g. "this Membase key was narrowed or revoked".
 
 Explicit tool calls use the SDK's own timeout (90 s): the first search after a quiet spell
@@ -115,7 +119,7 @@ the passages (each with its Memory) to the system message of that request.
 * **Nothing is persisted**: the recall lives in the model request only, never in the agent's
   state or checkpoint.
 * **No automatic writes by default**. `capture_turns=True` (opt-in) saves the user's own
-  message(s) of each turn, once, as a note in `container=`, in the background. Assistant
+  message(s) of each turn, once, as a note in the key's write target, in the background. Assistant
   replies are never saved, so an AI answer is not learned as a fact about the user.
 
 ## Many users

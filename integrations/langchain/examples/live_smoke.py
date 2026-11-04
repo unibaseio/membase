@@ -3,8 +3,8 @@
     MEMBASE_API_KEY=mbk_... python examples/live_smoke.py
 
 Reads only, unless MEMBASE_SMOKE_WRITE=1 (then it saves one clearly labelled note through the
-save tool; that needs a Read & write key, and a container id in MEMBASE_SMOKE_CONTAINER when
-the key reaches several Memories). Without MEMBASE_API_KEY it says so and exits 0.
+save tool; that needs a Read & write key with a write target, i.e. one that reaches a single
+Memory). Without MEMBASE_API_KEY it says so and exits 0.
 """
 
 from __future__ import annotations
@@ -33,14 +33,14 @@ def main() -> int:
     client = Membase(base_url=os.environ.get("MEMBASE_BASE_URL") or DEFAULT_BASE_URL)
     print("base url:", client.base_url)
 
-    containers = client.containers.list()["containers"]
-    print(f"containers in reach: {[c['name'] for c in containers]}")
+    memories = client.capabilities().get("memories") or []
+    print(f"Memories in reach: {[m['name'] for m in memories]}")
 
     t = time.monotonic()
     docs = MembaseRetriever(client=client, k=5).invoke(QUERY)
     print(f"retriever: {len(docs)} documents in {time.monotonic() - t:.1f}s")
     for d in docs:
-        print(f"  [{d.metadata['container_name']}] {d.page_content[:100]!r}")
+        print(f"  [{d.metadata['memory_name']}] {d.page_content[:100]!r}")
 
     search, save, profile = membase_tools(client)
     msg = search.invoke(
@@ -61,8 +61,6 @@ def main() -> int:
     if os.environ.get("MEMBASE_SMOKE_WRITE") == "1":
         stamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
         args = {"content": f"langchain-membase live smoke note, {stamp}."}
-        if os.environ.get("MEMBASE_SMOKE_CONTAINER"):
-            args["container"] = os.environ["MEMBASE_SMOKE_CONTAINER"]
         msg = save.invoke({"type": "tool_call", "name": save.name, "args": args, "id": "smoke-3"})
         print("save tool:", msg.content)
     else:

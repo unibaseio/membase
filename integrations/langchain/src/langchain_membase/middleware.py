@@ -50,7 +50,7 @@ class MembaseRecallMiddleware(AgentMiddleware):
     * The recall goes into the request's system message only; it is never written to the
       agent's state or checkpoint.
     * ``capture_turns=True`` (off by default) saves the user's own message(s) of each turn,
-      once, as a note in ``container``; assistant replies are never saved. Writing is
+      once, as a note in the key's write target; assistant replies are never saved. Writing is
       otherwise left to ``MembaseSaveTool``.
 
     Multi-user: pass ``client_for``; the user id comes from the run context
@@ -65,7 +65,6 @@ class MembaseRecallMiddleware(AgentMiddleware):
         api_key: str | None = None,
         base_url: str | None = None,
         local: str | os.PathLike | bool | None = None,
-        container: str | None = None,
         k: int | None = 5,
         timeout: float = DEFAULT_RECALL_TIMEOUT,
         capture_turns: bool = False,
@@ -78,7 +77,6 @@ class MembaseRecallMiddleware(AgentMiddleware):
             client = build_client(api_key, base_url, local)
         self.client = client
         self.client_for = client_for
-        self.container = container
         self.k = k
         self.timeout = timeout
         self.capture_turns = capture_turns
@@ -160,7 +158,7 @@ class MembaseRecallMiddleware(AgentMiddleware):
 
         def save() -> None:
             try:
-                client.memories.add(note, container=self.container)
+                client.memories.add(note)
             except Exception as e:  # noqa: BLE001 - logged, the run already finished
                 logger.warning("Membase capture failed: %s", describe_error(e))
 
@@ -183,7 +181,7 @@ class MembaseRecallMiddleware(AgentMiddleware):
 
     def _search(self, user_id: str, query: str) -> dict[str, Any]:
         client = resolve_client(self.client, self.client_for, user_id or None)
-        return client.search(query, container=self.container, limit=self.k)
+        return client.search(query, limit=self.k)
 
     def _recall(self, fn: Callable[[], dict[str, Any]]) -> str:
         try:
@@ -195,7 +193,7 @@ class MembaseRecallMiddleware(AgentMiddleware):
         failed = unavailable(resp)
         if failed:
             logger.warning("Membase recall: some Memories could not answer: %s", "; ".join(failed))
-        return format_passages(resp.get("results") or [])
+        return format_passages(resp.get("items") or [])
 
     def _failed(self, e: BaseException) -> str:
         logger.warning("Membase recall skipped, continuing without memory: %s", describe_error(e))

@@ -13,20 +13,19 @@ from membase import Membase
 
 BASE_URL = "https://api.membase.test"
 
-CONTAINERS = [
-    {"id": "mv-decisions", "name": "Project decisions"},
-    {"id": "mv-reading", "name": "Reading notes"},
-]
+MEMORIES = ["Project decisions", "Reading notes"]
 
 
 @dataclass
 class FakeMembase:
-    """Records every request; answers like the hosted API. Each key is one person's account."""
+    """Records every request; answers like the hosted memory API. Each key is one person's
+    account; no request names a Memory."""
 
     requests: list[dict[str, Any]] = field(default_factory=list)
-    containers: list[dict[str, Any]] = field(default_factory=lambda: list(CONTAINERS))
+    memories: list[str] = field(default_factory=lambda: list(MEMORIES))
+    write_target: str | None = "Project decisions"
     search_delay: float = 0.0
-    container_errors: dict[str, str] = field(default_factory=dict)
+    memory_errors: set[str] = field(default_factory=set)
     revoked_keys: set[str] = field(default_factory=set)
     read_only_keys: set[str] = field(default_factory=set)
     no_results: bool = False
@@ -46,91 +45,82 @@ class FakeMembase:
         if key in self.revoked_keys:
             return _error(403, "unauthorized", "unauthorized")
         path = request.url.path
-        if path == "/v1/containers":
-            return httpx.Response(200, json={"containers": self.containers})
         if path == "/v1/search":
+            if extra := set(body) - {"q", "limit", "mode"}:
+                return _error(422, "validation", f"unknown fields: {sorted(extra)}")
             if self.search_delay:
                 time.sleep(self.search_delay)
             return httpx.Response(200, json=self._search(key, body))
-        if path == "/v1/profile":
-            out: dict[str, Any] = {
-                "static": [f"The user behind {key} prefers dark mode."],
-                "dynamic": [{"id": "1", "content": "Started reading Gödel, Escher, Bach."}],
-            }
-            if request.url.params.get("q"):
-                out["results"] = self._search(key, {"q": request.url.params["q"], "limit": 1})[
-                    "results"
-                ]
-            return httpx.Response(200, json=out)
-        if path == "/v1/memories":
+        if path == "/v1/capabilities":
+            return httpx.Response(
+                200,
+                json={
+                    "principal": "apikey",
+                    "surfaces": ["rest"],
+                    "tools": ["search_memories", "add_memory"],
+                    "actions": ["search", "memories.add"],
+                    "memories": [{"name": m, "kind": "text"} for m in self.memories],
+                },
+            )
+        if path == "/v1/profile-facts":
+            facts = [
+                f"The user behind {key} prefers dark mode.",
+                "Started reading Gödel, Escher, Bach.",
+            ]
+            items = [
+                {"id": f"pf_{i}", "content": c, "source_kind": "user_stated", "recorded_at": None}
+                for i, c in enumerate(facts)
+            ]
+            return httpx.Response(200, json={"items": items, "has_more": False, "partial": []})
+        if path == "/v1/memories/add" and request.method == "POST":
             if key in self.read_only_keys:
                 return _error(
                     403,
                     "unauthorized",
                     "tool 'add_memory' is not in this agent's capability profile",
                 )
-            if body.get("static"):
-                return httpx.Response(
-                    202,
-                    json={
-                        "static": True,
-                        "status": "recorded",
-                        "run_id": "run-1",
-                        "content": body["content"],
-                    },
-                )
-            container = body.get("container")
-            if container is None and len(self.containers) > 1:
+            if extra := set(body) - {"content", "title"}:
+                return _error(422, "validation", f"unknown fields: {sorted(extra)}")
+            if self.write_target is None:
                 return _error(
-                    400, "validation", "container is required when more than one is in reach"
+                    422,
+                    "write_target_required",
+                    f"reaches {len(self.memories)} Memories and has no write target",
                 )
-            container = container or self.containers[0]["id"]
-            name = next(c["name"] for c in self.containers if c["id"] == container)
             return httpx.Response(
                 202,
                 json={
-                    "memory_id": "m-1",
-                    "document_id": "srcitem_1",
-                    "status": "queued",
-                    "container": container,
-                    "container_name": name,
-                    "learning_run": {"id": "r-1"},
+                    "id": "doc_bm90ZS0x",
+                    "kind": "note",
+                    "status": "processing",
+                    "learning": [{"memory_name": self.write_target, "status": "processing"}],
                 },
             )
         return _error(404, "not_found", f"no route {path}")
 
     def _search(self, key: str, body: dict[str, Any]) -> dict[str, Any]:
         q = body["q"]
-        targets = [c for c in self.containers if body.get("container") in (None, c["id"])]
-        limit = body.get("limit") or max(8, len(targets))
-        answering = [c for c in targets if c["id"] not in self.container_errors]
-        results = []
+        limit = body.get("limit") or 8
+        answering = [m for m in self.memories if m not in self.memory_errors]
+        items = []
         if not self.no_results and answering:
             for i in range(limit):
-                c = answering[i % len(answering)]
-                results.append(
+                name = answering[i % len(answering)]
+                items.append(
                     {
+                        "type": "memory",
+                        "id": f"mem_{i}",
                         "content": f"Passage {i + 1} about {q!r} for {key}",
-                        "container": c["id"],
-                        "container_name": c["name"],
                         "score": 1.0 - i / 100,
-                        "source": f"episode:{c['id']}:{i}",
+                        "memory_name": name,
                     }
                 )
         return {
-            "query": q,
-            "results": results,
-            "containers": [
-                {
-                    "id": c["id"],
-                    "name": c["name"],
-                    **(
-                        {"error": self.container_errors[c["id"]]}
-                        if c["id"] in self.container_errors
-                        else {}
-                    ),
-                }
-                for c in targets
+            "items": items,
+            "partial": [
+                {"memory_name": m, "reason": "error"}
+                for m in self.memories
+                if m in self.memory_errors
             ],
         }
 

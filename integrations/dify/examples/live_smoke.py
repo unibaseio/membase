@@ -3,8 +3,8 @@
     MEMBASE_API_KEY=mbk_... .venv/bin/python examples/live_smoke.py
     MEMBASE_API_KEY=mbk_... MEMBASE_SMOKE_WRITE=1 .venv/bin/python examples/live_smoke.py
 
-Reads only, unless MEMBASE_SMOKE_WRITE=1: then it also saves one clearly labelled note
-(to MEMBASE_SMOKE_CONTAINER, a container name or id, when the key reaches several).
+Reads only, unless MEMBASE_SMOKE_WRITE=1: then it also saves one clearly labelled note to the
+key's write target (a key that reaches several Memories has none, and the save says so).
 MEMBASE_BASE_URL overrides the API root (an https host on membase.ai, membase.com or membase.io).
 """
 
@@ -62,7 +62,7 @@ def main() -> int:
         except Exception as err:  # noqa: BLE001 - a smoke test prints what the agent would see
             print(f"ERROR {type(err).__name__}: {err}")
 
-    print("== validate credentials (lists containers)")
+    print("== validate credentials (reads the key's capabilities)")
     executor.validate_tool_provider_credentials(
         Session.empty_session(),
         ToolValidateCredentialsRequest(
@@ -75,11 +75,7 @@ def main() -> int:
     call("search_memory", {"query": "What do you know about me?", "limit": 5})
     if os.environ.get("MEMBASE_SMOKE_WRITE") == "1":
         call(
-            "save_memory",
-            {
-                "content": "Membase Dify plugin live smoke test note (safe to delete).",
-                "container": os.environ.get("MEMBASE_SMOKE_CONTAINER", ""),
-            },
+            "save_memory", {"content": "Membase Dify plugin live smoke test note (safe to delete)."}
         )
     return 0
 

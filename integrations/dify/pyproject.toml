@@ -2,11 +2,11 @@
 # which is what Dify installs; this file is not part of the .difypkg.
 [project]
 name = "membase-dify-plugin-dev"
-version = "0.0.1"
+version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "dify_plugin==0.9.1",
-    "unibaseio-membase==0.3.2",
+    "unibaseio-membase==0.4.0",
 ]
 
 [dependency-groups]
