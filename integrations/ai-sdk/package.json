@@ -1,0 +1,62 @@
+{
+  "name": "@unibaseio/membase-ai-sdk",
+  "version": "0.1.0",
+  "description": "Membase memory for the Vercel AI SDK: search, save and profile tools over the user's Membase account.",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "membase",
+    "memory",
+    "agent-memory",
+    "long-term-memory",
+    "ai-sdk",
+    "vercel-ai-sdk",
+    "ai",
+    "agents"
+  ],
+  "homepage": "https://membase.com",
+  "dependencies": {
+    "@unibaseio/membase": "^0.4.0"
+  },
+  "peerDependencies": {
+    "ai": "^6.0.0 || ^7.0.0",
+    "zod": "^3.25.76 || ^4.1.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "ai": "^7.0.162",
+    "typescript": "^5.6.2",
+    "vitest": "^4.1.12",
+    "zod": "^4.1.8"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/unibaseio/membase.git",
+    "directory": "integrations/ai-sdk"
+  }
+}

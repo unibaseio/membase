@@ -1,9 +1,10 @@
 {
   "name": "membase-npm",
   "private": true,
-  "description": "npm workspaces: @unibaseio/membase (typescript/) and @unibaseio/membase-cli (cli/).",
+  "description": "npm workspaces: @unibaseio/membase (typescript/), @unibaseio/membase-cli (cli/) and @unibaseio/membase-ai-sdk (integrations/ai-sdk/).",
   "workspaces": [
     "typescript",
-    "cli"
+    "cli",
+    "integrations/ai-sdk"
   ]
 }

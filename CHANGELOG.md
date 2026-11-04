@@ -1,5 +1,11 @@
 # Changelog
 
+## @unibaseio/membase-ai-sdk 0.1.0 — Vercel AI SDK tools
+
+A new integration, [`integrations/ai-sdk/`](integrations/ai-sdk): `membaseTools()` gives an AI SDK 6
+or 7 agent the `membase_search`, `membase_save` and `membase_profile` tools over
+`@unibaseio/membase` 0.4.
+
 ## 0.4.0 — the memory API
 
 `unibaseio-membase` 0.4.0, `@unibaseio/membase` 0.4.0, `@unibaseio/membase-cli` 0.4.0 and every
