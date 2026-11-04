@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "membase-google-adk"
+version = "0.1.0"
+description = "Membase memory for Google ADK: a memory service with time-boxed recall and deliberate search/save/profile tools."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Unibase" }]
+keywords = ["google-adk", "adk", "agents", "memory", "membase", "long-term-memory"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+# google-adk>=1.20.0: the offline tests pass on 1.20.0, 1.25.0, 1.30.0, 1.35.0, 1.39.0, 2.0.0 and
+# 2.13.0, and fail on 1.15.0.
+dependencies = [
+    "google-adk>=1.20.0",
+    "unibaseio-membase>=0.4.0",
+]
+
+[project.optional-dependencies]
+local = ["unibaseio-membase[local]>=0.4.0"]
+
+[project.urls]
+Homepage = "https://membase.com"
+Documentation = "https://github.com/unibaseio/membase/tree/main/integrations/google-adk#readme"
+Repository = "https://github.com/unibaseio/membase"
+Issues = "https://github.com/unibaseio/membase/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.25",
+    "ruff>=0.11",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/membase_google_adk"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "tests", "examples", "README.md", "LICENSE", "pyproject.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

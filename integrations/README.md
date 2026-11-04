@@ -8,6 +8,8 @@ package, tests and README.
 | [`agent-framework/`](agent-framework) | Microsoft Agent Framework (Python) | `agent-framework-membase` on PyPI | `pip install agent-framework-membase` |
 | [`ai-sdk/`](ai-sdk) | Vercel AI SDK (TypeScript) | `@unibaseio/membase-ai-sdk` on npm | `npm install @unibaseio/membase-ai-sdk` |
 | [`dify/`](dify) | Dify | Dify plugin `unibase/membase` | Dify › Plugins › Marketplace, search Membase (once listed) |
+| [`google-adk/`](google-adk) | Google ADK (Python) | `membase-google-adk` on PyPI | `pip install membase-google-adk` |
+| [`haystack/`](haystack) | Haystack (Python) | `membase-haystack` on PyPI | `pip install membase-haystack` |
 | [`hermes/`](hermes) | Hermes Agent | Hermes plugin `unibaseio-membase` | `hermes plugins install unibaseio/membase/integrations/hermes` |
 | [`langchain/`](langchain) | LangChain / LangGraph (Python) | `langchain-membase` on PyPI | `pip install langchain-membase` |
 | [`openclaw/`](openclaw) | OpenClaw | `@unibaseio/membase` on [ClawHub](https://clawhub.ai/unibaseio/plugins/membase) | `openclaw plugins install clawhub:@unibaseio/membase` |
