@@ -392,6 +392,80 @@ def test_client_for_without_a_user_id_uses_no_ones_memory(manager, fake, load):
     assert fake.requests == []
 
 
+
+# ---- a host that leaves memory to prefetch (tools off, fast recall, the profile each turn) --------
+
+
+def user_store_provider(home: Path) -> None:
+    (home / "config.yaml").write_text("memory:\n  provider: unibaseio-membase\n  user_store: provider\n",
+                                      encoding="utf-8")
+
+
+def test_tools_can_be_switched_off(manager, monkeypatch):
+    """Memory left to prefetch: no turn spends a model call deciding whether to search or save."""
+    monkeypatch.setenv("MEMBASE_TOOLS", "off")
+    mgr, provider = manager()
+    assert provider.get_tool_schemas() == []
+    assert "membase_search" not in mgr.build_system_prompt()
+
+
+def test_fast_recall_is_one_round_with_more_passages(manager, fake, monkeypatch):
+    monkeypatch.setenv("MEMBASE_RECALL_MODE", "fast")
+    mgr, _ = manager()
+    mgr.prefetch_all("what did we decide about the ledger database?")
+    (search,) = fake.calls("POST", "/v1/search")
+    assert fake.body(search)["mode"] == "fast"
+    assert fake.body(search)["limit"] == 10, "the agent's own model judges more passages"
+
+
+def test_the_profile_is_recalled_beside_the_search_when_the_provider_keeps_it(manager, fake, home):
+    user_store_provider(home)
+    mgr, _ = manager()
+    block = mgr.prefetch_all("what did we decide about the ledger database?")
+    assert "the user's profile" in block and "- Works on the ledger service." in block
+    assert "- [Project decisions] We settled on Postgres for the ledger." in block
+    assert len(fake.calls("GET", "/v1/profile-facts")) == 1
+    assert "injected before each turn as data" in mgr.build_system_prompt()
+
+
+def test_a_profile_that_could_not_be_read_says_so(manager, fake, home):
+    user_store_provider(home)
+    fake.fail["/v1/profile-facts"] = 403
+    mgr, _ = manager()
+    block = mgr.prefetch_all("anything about me?")
+    assert "Not read this turn (this key may not read it)" in block
+    assert "do not assume it is empty" in block
+
+
+def test_the_profile_is_not_read_each_turn_by_default(manager, fake):
+    mgr, _ = manager()
+    mgr.prefetch_all("what did we decide about the ledger database?")
+    assert fake.calls("GET", "/v1/profile-facts") == []
+
+
+def test_a_fact_about_the_user_goes_to_the_profile(manager, fake, home):
+    user_store_provider(home)
+    _, provider = manager()
+    out = provider.record_user_fact("  Prefers tea to coffee. ")
+    assert out == {"recorded": True, "id": "pf_Mw", "created": True}
+    (add,) = fake.calls("POST", "/v1/profile-facts/add")
+    assert fake.body(add) == {"content": "Prefers tea to coffee."}
+
+
+@pytest.mark.parametrize("context", ["cron", "subagent"])
+def test_an_unattended_run_records_no_fact_about_the_user(manager, fake, context):
+    _, provider = manager(agent_context=context)
+    with pytest.raises(RuntimeError, match="does not write"):
+        provider.record_user_fact("Prefers tea.")
+    assert fake.calls("POST", "/v1/profile-facts/add") == []
+
+
+def test_a_refused_fact_raises_one_actionable_sentence(manager, fake):
+    fake.fail["/v1/profile-facts/add"] = 403
+    _, provider = manager()
+    with pytest.raises(RuntimeError, match="does not include the profile"):
+        provider.record_user_fact("Prefers tea.")
+
 def test_runs_in_the_plugin_host(home, load):
     """With plugins.isolation: host the provider's code runs in Hermes' plugin-host process."""
     from agent.memory_manager import MemoryManager

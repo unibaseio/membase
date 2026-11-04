@@ -33,7 +33,8 @@ KEY = "mbk_test_owner_key"
 
 
 class FakeMembase:
-    """Just enough of the Membase memory API (POST /v1/search, GET /v1/profile-facts, POST /v1/memories/add).
+    """Just enough of the Membase memory API (POST /v1/search, GET /v1/profile-facts, POST /v1/profile-facts/add,
+    POST /v1/memories/add).
     ``fail`` maps a path to a status code, an exception or a callable. ``write_target`` is the Memory a
     save lands in; None stands for a key that reaches several and has none."""
 
@@ -92,6 +93,10 @@ class FakeMembase:
             return httpx.Response(200, json=self.search_response)
         if path == "/v1/profile-facts" and request.method == "GET":
             return httpx.Response(200, json=self.profile_response)
+        if path == "/v1/profile-facts/add" and request.method == "POST":
+            content = self.body(request).get("content")
+            return httpx.Response(200, json={"id": "pf_Mw", "content": content, "source_kind": "user_stated",
+                                             "created": True})
         if path == "/v1/memories/add" and request.method == "POST":
             unknown = set(self.body(request)) - {"content", "title"}
             if unknown:

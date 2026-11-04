@@ -14,8 +14,9 @@ Hermes:
   (`capture_turns`, off by default).
 
 Only one external memory provider is active at a time in Hermes. Hermes' own MEMORY.md / USER.md
-keep working next to it and stay Hermes's own: Membase has no call that records a standing fact
-in the user's profile, so nothing the built-in memory tool writes is copied to Membase.
+keep working next to it and stay Hermes's own, unless the Hermes build has `memory.user_store`
+and the profile sets it to `provider` (below): then facts about the user go to the Membase
+profile instead of USER.md.
 
 ## Install
 
@@ -50,6 +51,8 @@ the plugin reads it through Hermes' per-profile secret scope, never from a file 
 | `auto_recall` | `unibaseio-membase.json` | `true` | Search before each turn |
 | `recall_limit` | `unibaseio-membase.json` | `5` | Passages injected per turn |
 | `recall_max_chars` | `unibaseio-membase.json` | `4000` | Upper bound on the injected block |
+| `recall_mode` / `MEMBASE_RECALL_MODE` | `unibaseio-membase.json` / `.env` | `full` | `fast`: one round of retrieval and no model call; at least 10 passages and 8,000 characters handed to the agent, whose own model judges them |
+| `tools` / `MEMBASE_TOOLS` | `unibaseio-membase.json` / `.env` | `on` | `off`: no `membase_*` tools; memory is left to recall before each turn (and Hermes's own memory), so no turn spends a model call deciding whether to search or save |
 
 The settings file is `$HERMES_HOME/unibaseio-membase.json` (mode 0600); it never holds the key.
 When a setting appears in both places, the value in the file wins.
@@ -89,6 +92,15 @@ saved as one note, as they wrote them, to the key's write target. The assistant'
 and no role labels are added, so an AI answer is never learned as a fact about the user. Captures never run from `cron`, `subagent` or
 `flush` agents, or for turns written by bots. A key without a write target has its captures
 refused, and the refusal is logged once.
+
+**The user's profile (`memory.user_store: provider`).** A Hermes build that has the
+`memory.user_store` setting can hand facts about the user to the provider instead of writing
+USER.md. With it set to `provider` in the profile's `config.yaml`, what Hermes's memory tool
+records about the user goes to the Membase profile (`POST /v1/profile-facts/add`, through
+`record_user_fact`), and recall before each turn also reads the profile, beside the search, and
+hands its standing facts (newest first, up to 3,000 characters) to the agent as data. A profile
+that could not be read is said to be unread, never shown as empty. The agent cannot remove a
+fact; the user forgets facts in the Membase app. `cron`, `subagent` and `flush` agents record none.
 
 **Errors** come back to the model as one plain sentence:
 

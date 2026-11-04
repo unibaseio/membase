@@ -78,7 +78,7 @@ learning finishes before a write answers, so receipts say `succeeded`. Media ite
 and thumbnails as routes (`/v1/media/{id}/file`, `…/thumbs/{name}`, with `Range` support) instead of
 paths, read with `media.file(id, thumb=, range=)` (TypeScript `media.file(id, {thumb, range})`): the
 bytes, content type and, for a range, status 206 — with the key, hosted and local alike. Storing media (`media.add`) and `media.ask` stay local-only and take no container. Profile
-facts live in the store's profile (`~/.membase/profile/`) and need `unibaseio-membase-core` 0.3.5;
+facts live in the store's profile (`~/.membase/profile/`) and need `unibaseio-membase-core` 0.3.5 (the `[local]` extra installs 0.3.6, which also reads a PDF from its own text layer and reranks a long passage by the part that answers);
 a statement added locally is `user_stated`, one kept with `add --static` before 0.4 reads as
 `imported`. Local `ask` is the engine's answer from the Memory whose facts match best.
 
@@ -102,6 +102,9 @@ a statement added locally is `user_stated`, one kept with `add --static` before 
 
 All cite `memory_name`, report `partial`, take no container option and explain a missing write
 target: `langchain-membase` 0.2.0, `agent-framework-membase` 0.2.0, `membase-strands` 0.2.0,
-Hermes plugin `unibaseio-membase` 0.2.0, Dify plugin `unibase/membase` 0.1.0, OpenClaw plugin
+Hermes plugin `unibaseio-membase` 0.3.0, Dify plugin `unibase/membase` 0.1.0, OpenClaw plugin
 `@unibaseio/membase` 0.2.0. Each requires the 0.4 SDK. Their profile tool (`membase_profile`,
 Dify's `get_profile`) lists the user's profile facts and takes no topic.
+The Hermes plugin also takes `tools: off` (`MEMBASE_TOOLS`), `recall_mode: fast`
+(`MEMBASE_RECALL_MODE`), and, on a Hermes build with `memory.user_store: provider`, keeps the
+user's facts in their Membase profile (`record_user_fact`) and recalls the profile before each turn.
