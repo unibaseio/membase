@@ -204,18 +204,9 @@ def _user_store(home: str = "") -> str:
     profile from one process, Hermes's ``load_config()`` reads the process's home — the root —
     and would say ``file`` for an assistant whose profile says ``provider``."""
     try:
-        if home:
-            try:  # Hermes's own YAML reader; older builds read config with PyYAML
-                import hermes_yaml as yaml
-            except ImportError:
-                import yaml
+        from hermes_cli.config import load_config, read_user_config_raw
 
-            path = Path(home) / "config.yaml"
-            config = yaml.safe_load(path.read_text()) if path.exists() else {}
-        else:
-            from hermes_cli.config import load_config
-
-            config = load_config()
+        config = read_user_config_raw(Path(home) / "config.yaml") if home else load_config()
         memory = (config or {}).get("memory") or {}
         return str(memory.get("user_store") or "file").strip().lower()
     except Exception:  # pragma: no cover - an unreadable config keeps Hermes's default
