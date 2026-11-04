@@ -21,8 +21,6 @@ network:
   domains:
     - api.app.membase.com
     - "*.membase.com"
-    - "*.membase.ai"
-    - "*.membase.io"
 meta:
   version: 0.1.0
   arch:

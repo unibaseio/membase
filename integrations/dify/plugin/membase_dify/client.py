@@ -31,7 +31,7 @@ from membase.errors import (
 
 # The plugin's own default: it does not depend on which SDK release is installed.
 DEFAULT_BASE_URL = "https://api.app.membase.com"
-ALLOWED_HOST_SUFFIXES = ("membase.com", "membase.ai", "membase.io")
+ALLOWED_HOST_SUFFIXES = ("membase.com",)
 # Dify allows one tool invocation 300 s (see main.py). Two SDK attempts of 90 s fit;
 # the SDK's default of three might not.
 MAX_RETRIES = 1
@@ -65,7 +65,7 @@ def resolve_base_url(raw: Any) -> str:
         )
     if not any(host == s or host.endswith("." + s) for s in ALLOWED_HOST_SUFFIXES):
         raise MembaseToolError(
-            "Base URL must be a Membase host (membase.com, membase.ai or membase.io); "
+            "Base URL must be a Membase host on membase.com; "
             "leave it empty to use https://api.app.membase.com"
         )
     return f"https://{host}"

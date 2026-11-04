@@ -35,8 +35,8 @@ credentials_for_provider:
       en_US: https://api.app.membase.com
       zh_Hans: https://api.app.membase.com
     help:
-      en_US: Leave empty for the Membase cloud. Only HTTPS hosts on membase.com, membase.ai or membase.io are accepted.
-      zh_Hans: 留空即使用 Membase 云服务。仅接受 membase.com、membase.ai 或 membase.io 下的 HTTPS 地址。
+      en_US: Leave empty for the Membase cloud. Only HTTPS hosts on membase.com are accepted.
+      zh_Hans: 留空即使用 Membase 云服务。仅接受 membase.com 下的 HTTPS 地址。
 tools:
   - tools/search_memory.yaml
   - tools/save_memory.yaml
