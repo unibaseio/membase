@@ -1,5 +1,18 @@
 # Changelog
 
+## membase-google-adk 0.1.0 and membase-haystack 0.1.0
+
+Two new integrations, both on `unibaseio-membase` 0.4:
+
+- [`integrations/google-adk/`](integrations/google-adk): `MembaseMemoryService`, a
+  `BaseMemoryService` that ADK's `preload_memory` and `load_memory` search (time-boxed recall that
+  fails open; writing sessions is opt-in with `capture=True`), and `membase_tools()` with
+  `membase_search`, `membase_save` and `membase_profile`. `client_for` maps ADK's user id to that
+  user's own client.
+- [`integrations/haystack/`](integrations/haystack): `MembaseMemoryStore`, a
+  `MembaseMemoryRetriever` component (time-boxed, fails open, serializes with the pipeline) and
+  `membase_tools()` for a Haystack `Agent`.
+
 ## @unibaseio/membase-ai-sdk 0.1.0 — Vercel AI SDK tools
 
 A new integration, [`integrations/ai-sdk/`](integrations/ai-sdk): `membaseTools()` gives an AI SDK 6
