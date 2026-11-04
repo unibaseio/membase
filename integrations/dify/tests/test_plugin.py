@@ -178,12 +178,14 @@ def test_validation_requires_a_key(executor, membase):
 @pytest.mark.parametrize(
     "base_url",
     [
-        "http://api.app.membase.ai",
+        "http://api.app.membase.com",
         "https://evil.example.com",
-        "https://membase.ai.evil.com",
-        "https://user:pw@api.app.membase.ai",
-        "https://api.app.membase.ai/v1",
-        "https://api.app.membase.ai:8443",
+        "https://membase.com.evil.com",
+        "https://user:pw@api.app.membase.com",
+        "https://api.app.membase.com/v1",
+        "https://api.app.membase.com:8443",
+        "https://api.app.membase.ai",
+        "https://api.app.membase.io",
         "https://169.254.169.254",
     ],
 )
@@ -196,9 +198,9 @@ def test_validation_refuses_a_base_url_off_membase(executor, membase, base_url):
 
 
 def test_a_membase_base_url_is_used(executor, membase):
-    validate(executor, {"api_key": KEY, "base_url": "https://api.app.membase.io/"})
-    assert membase.base_urls == ["https://api.app.membase.io"]
-    assert membase.requests[0].url.host == "api.app.membase.io"
+    validate(executor, {"api_key": KEY, "base_url": "https://api.dev.app.membase.com/"})
+    assert membase.base_urls == ["https://api.dev.app.membase.com"]
+    assert membase.requests[0].url.host == "api.dev.app.membase.com"
 
 
 # ---------------------------------------------------------------- search_memory

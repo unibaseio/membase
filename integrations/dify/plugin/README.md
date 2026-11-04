@@ -86,7 +86,7 @@ debug preview has no such header. Never put one user's key in front of another u
 
 - The Dify plugin runtime needs outbound HTTPS access to `api.app.membase.com` (port 443). For a
   self-hosted Dify behind a proxy or firewall, allow that host. The Base URL field accepts only
-  HTTPS hosts on `membase.com`, `membase.ai` or `membase.io`.
+  HTTPS hosts on `membase.com`.
 - The first search after a quiet spell can take up to a minute while the account's memory
   wakes; later calls are faster. Each request waits up to 90 seconds and is retried once.
 - The account needs a working model under **AI Setup** in the Membase app. Without one, searches

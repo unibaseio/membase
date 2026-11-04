@@ -14,7 +14,7 @@ no memory plugin type, so memory is offered as tools with provider credentials.
   Membase`), installed by Dify from `plugin/requirements.txt`. Its only runtime dependency is
   `httpx`, which `dify_plugin` already needs, so the SDK costs the package nothing.
 - `plugin/membase_dify/client.py` builds the client from the workspace credentials (API key,
-  optional base URL limited to HTTPS on `membase.com` / `membase.ai` / `membase.io`) and turns SDK errors into
+  optional base URL limited to HTTPS on `membase.com`) and turns SDK errors into
   messages: a `403` says the key was revoked, narrowed or is read-only and must not be retried.
 - `plugin/provider/membase.py` validates credentials by reading the key's capabilities
   (`GET /v1/capabilities`).

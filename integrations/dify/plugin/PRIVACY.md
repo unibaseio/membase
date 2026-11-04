@@ -9,7 +9,7 @@ workspace administrator enters in the plugin's credentials.
 ## What the plugin sends, and where
 
 Every request goes over HTTPS to the Membase API at `https://api.app.membase.com` (or to
-another HTTPS host on `membase.com` / `membase.ai` / `membase.io` if the administrator sets a base URL). No
+another HTTPS host on `membase.com` if the administrator sets a base URL). No
 other service is contacted by the plugin.
 
 | Tool | Data sent to Membase |

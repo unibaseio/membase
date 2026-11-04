@@ -5,7 +5,7 @@
 
 Reads only, unless MEMBASE_SMOKE_WRITE=1: then it also saves one clearly labelled note to the
 key's write target (a key that reaches several Memories has none, and the save says so).
-MEMBASE_BASE_URL overrides the API root (an https host on membase.ai, membase.com or membase.io).
+MEMBASE_BASE_URL overrides the API root (an https host on membase.com).
 """
 
 from __future__ import annotations
