@@ -1,0 +1,10 @@
+{
+  "name": "membase",
+  "version": "1.0.0",
+  "description": "Long-term memory for you and your AIs: search your Membase memories and profile from Gemini CLI.",
+  "mcpServers": {
+    "membase": {
+      "httpUrl": "https://api.app.membase.com/mcp-http"
+    }
+  }
+}

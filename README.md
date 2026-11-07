@@ -129,6 +129,15 @@ claude mcp add --transport http membase https://api.app.membase.com/mcp-http \
 Hosted without the header, the connection signs you in and is read-only. Setup for Claude, ChatGPT,
 Cursor, Codex and other clients: [Connect your AI](https://docs.membase.com/connect/).
 
+Gemini CLI, as an extension (it signs you in on first use; `/mcp auth membase` signs in again):
+
+```bash
+gemini extensions install https://github.com/unibaseio/membase
+```
+
+Cline: add the server to `cline_mcp_settings.json`; [llms-install.md](llms-install.md) has the
+entry, with and without a developer key.
+
 ## Docs
 
 - [SDK reference](https://docs.membase.com/build/reference/sdk-quickstart/): methods, REST routes, MCP tools, access levels
