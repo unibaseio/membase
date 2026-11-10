@@ -1,0 +1,96 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "membase",
+  "version": "1.0.0",
+  "description": "Long-term memory for you and your AIs: search your Membase memories and read your profile from ChatGPT.",
+  "author": {
+    "name": "Unibase",
+    "email": "support@membase.com",
+    "url": "https://membase.com"
+  },
+  "homepage": "https://membase.com",
+  "repository": "https://github.com/unibaseio/membase",
+  "keywords": ["memory", "long-term memory", "personal knowledge", "notes", "profile"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Membase",
+        "shortDescription": "One memory for every AI",
+        "longDescription": "Membase is long-term memory that you own and every AI you use can share. Bring your material into Membase (files, Notion pages, web pages saved with the browser extension) and it learns what matters into Memories. Connect ChatGPT and it can draw on that memory in any conversation.\n\nWith Membase in ChatGPT you can:\n- Search your memories in natural language and get back the relevant passages, each labelled with the Memory it came from.\n- See what your memory has learned most recently, and open any single fact.\n- Let ChatGPT read your profile (name, role, lasting preferences) so its answers fit you, if you allow profile access.\n\nYou stay in control. When you connect, you choose exactly which Memories ChatGPT may read and whether it may see your profile, and you can turn them off or disconnect at any time under Connect in Membase. The connection is read-only: ChatGPT cannot change or delete anything in your memory. The same memory works in Claude, Cursor, Codex and other MCP clients, so what you teach once carries across your tools.",
+        "developerName": "Unibase",
+        "category": "Productivity",
+        "capabilities": [
+          "Search your Membase memories in natural language, with the source Memory of each result",
+          "List what your memory learned most recently and open a single fact",
+          "Read your profile (name, role, lasting preferences) when you allow it"
+        ],
+        "websiteURL": "https://membase.com",
+        "supportURL": "https://docs.membase.com/connect/clients/chatgpt/",
+        "privacyPolicyURL": "https://membase.com/privacy",
+        "termsOfServiceURL": "https://membase.com/terms",
+        "defaultPrompt": [
+          "Where did I leave off on the website redesign? Check my Membase memory.",
+          "What did I decide about pricing, and where did that come from?",
+          "What does my Membase profile say about me?"
+        ],
+        "brandColor": "#3E61FF",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/logo.png"
+      },
+      "onboardingSkill": "./skills/membase-memory/SKILL.md",
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Shows what the connection may read",
+              "prompt": "What can my Membase connection do?",
+              "tools_triggered": ["get_capabilities"],
+              "expected_behavior": "Calls get_capabilities and lists the read actions, the Memory the connection may use by name, and whether profile access is on."
+            },
+            {
+              "description": "Finds where a project was left off",
+              "prompt": "Where did I leave off on the website redesign? Check my Membase memory.",
+              "tools_triggered": ["search_memories"],
+              "expected_behavior": "Calls search_memories and answers from the redesign status notes: pricing page copy not written yet (waiting on the Pro plan price), contact form needs spam protection; names the Memory the passages came from."
+            },
+            {
+              "description": "Recalls a past decision with its source",
+              "prompt": "What did I decide about the Pro plan price, and where did that come from?",
+              "tools_triggered": ["search_memories"],
+              "expected_behavior": "Calls search_memories and answers $24 per month or $240 per year, with the reason from the pricing meeting notes, and says the answer comes from those notes."
+            },
+            {
+              "description": "Lists recent memory and opens one fact",
+              "prompt": "What has my Membase memory learned lately? Open the first one in full.",
+              "tools_triggered": ["list_memories", "get_memory"],
+              "expected_behavior": "Calls list_memories, summarises the newest facts, then calls get_memory with the first fact's id and shows it in full."
+            },
+            {
+              "description": "Personalises from the profile",
+              "prompt": "Using my Membase profile, write a two-sentence speaker bio for me.",
+              "tools_triggered": ["list_profile_facts"],
+              "expected_behavior": "Calls list_profile_facts and writes a bio for Alex Rivera, founder and lead product designer at Northwind Studio, based in Lisbon."
+            }
+          ],
+          "negative": [
+            {
+              "description": "General knowledge needs no memory",
+              "prompt": "What is the capital of Portugal?"
+            },
+            {
+              "description": "Arithmetic needs no memory",
+              "prompt": "What is 15% of 240?"
+            },
+            {
+              "description": "Creative writing unrelated to the user's past",
+              "prompt": "Write a haiku about autumn rain."
+            }
+          ]
+        }
+      },
+      "publication": {
+        "release_notes": "First release: search your Membase memories and read your profile from ChatGPT, read-only."
+      }
+    }
+  }
+}

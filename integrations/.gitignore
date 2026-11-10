@@ -11,3 +11,4 @@ node_modules/
 # Submission notes stay with the maintainers, not in the published repo.
 SUBMISSION.md
 CONVENTIONS.md
+*.zip
