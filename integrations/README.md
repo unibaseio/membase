@@ -7,6 +7,7 @@ package, tests and README.
 |---|---|---|---|
 | [`agent-framework/`](agent-framework) | Microsoft Agent Framework (Python) | `agent-framework-membase` on PyPI | `pip install agent-framework-membase` |
 | [`ai-sdk/`](ai-sdk) | Vercel AI SDK (TypeScript) | `@unibaseio/membase-ai-sdk` on npm | `npm install @unibaseio/membase-ai-sdk` |
+| [`chatgpt/`](chatgpt) | ChatGPT (read-only, OAuth) | Agent Plugins package | Upload the ZIP at platform.openai.com/plugins (see its README) |
 | [`dify/`](dify) | Dify | Dify plugin `unibase/membase` | Dify › Plugins › Marketplace, search Membase (once listed) |
 | [`google-adk/`](google-adk) | Google ADK (Python) | `membase-google-adk` on PyPI | `pip install membase-google-adk` |
 | [`haystack/`](haystack) | Haystack (Python) | `membase-haystack` on PyPI | `pip install membase-haystack` |
