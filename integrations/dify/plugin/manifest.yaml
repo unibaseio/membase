@@ -1,4 +1,4 @@
-version: 0.1.0
+version: 0.1.1
 type: plugin
 author: unibase
 name: membase
@@ -7,10 +7,15 @@ contact: support@unibase.com
 label:
   en_US: Membase
   zh_Hans: Membase
+  ja_JP: Membase
 description:
-  en_US: Search, save and read a person's long-term memory in Membase from Dify agents and workflows.
-  zh_Hans: 在 Dify 的 Agent 和工作流中搜索、保存和读取 Membase 中的个人长期记忆。
-icon: icon.svg
+  en_US: "Long-term memory for Dify agents and chatbots: remember users across conversations and apps, with every memory cited."
+  zh_Hans: "为 Dify Agent 和聊天机器人提供长期记忆：跨对话、跨应用记住用户，每条记忆都注明来源。"
+  ja_JP: "Dify のエージェントとチャットボットに長期記憶を。会話やアプリをまたいでユーザーを覚え、記憶ごとに出典を示します。"
+icon: membase.svg
+tags:
+  - utilities
+  - productivity
 resource:
   memory: 268435456
   permission: {}

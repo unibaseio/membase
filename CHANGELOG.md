@@ -1,5 +1,11 @@
 # Changelog
 
+## Dify plugin unibase/membase 0.1.1
+
+Listing text only, no code changes: a new Marketplace description in English, Chinese and
+Japanese, the `utilities` and `productivity` tags, a README that opens with why Membase and a
+three-step quick start, and the Membase logo as the plugin icon (`_assets/membase.svg`).
+
 ## membase-google-adk 0.1.0 and membase-haystack 0.1.0
 
 Two new integrations, both on `unibaseio-membase` 0.4:
