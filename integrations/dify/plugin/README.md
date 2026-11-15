@@ -1,6 +1,27 @@
 # Membase
 
-Long-term memory for Dify agents and workflows, from a [Membase](https://membase.com) account.
+Long-term memory for Dify agents and chatbots. Your app remembers what each user told it,
+across conversations and across apps, and every memory names where it came from.
+
+## Why Membase
+
+- **Remembers across conversations.** A user says something once; the agent recalls it next week.
+- **One memory, many tools.** The same memory also works in ChatGPT, Claude, Claude Code, Cursor and Codex over MCP.
+- **Cited answers.** Every passage names the Memory it came from, so the agent can say where it learned a fact.
+- **You stay in control.** Read-only keys for apps that should only look; deleting memory is done by the owner in the Membase app.
+
+## Quick start (3 steps)
+
+1. **Get a key.** In https://app.membase.com open Connect › Developer keys and create a key.
+2. **Install and authorize.** Install Membase from the Marketplace, then paste the key under Plugins › Membase › Authorize.
+3. **Add the tools.** In your agent, add Search memory and Get user profile (and Save memory if the key can write).
+
+![Authorize Membase in Dify](_assets/screenshot-authorize.png)
+
+![A Dify agent answering from memory, with the Memory cited](_assets/screenshot-agent.png)
+
+Full walkthrough: https://membase.com/blog/dify-agent-memory
+
 The plugin adds three tools:
 
 | Tool | What it does |

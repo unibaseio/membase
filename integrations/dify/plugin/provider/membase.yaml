@@ -4,10 +4,12 @@ identity:
   label:
     en_US: Membase
     zh_Hans: Membase
+    ja_JP: Membase
   description:
-    en_US: Long-term memory from one Membase account. Search it, save to it when the user asks, and read the user's profile.
-    zh_Hans: 来自一个 Membase 账户的长期记忆。可搜索记忆、在用户要求时保存记忆，并读取用户画像。
-  icon: icon.svg
+    en_US: "Long-term memory for Dify agents and chatbots: remember users across conversations and apps, with every memory cited."
+    zh_Hans: "为 Dify Agent 和聊天机器人提供长期记忆：跨对话、跨应用记住用户，每条记忆都注明来源。"
+    ja_JP: "Dify のエージェントとチャットボットに長期記憶を。会話やアプリをまたいでユーザーを覚え、記憶ごとに出典を示します。"
+  icon: membase.svg
   tags:
     - productivity
     - search
