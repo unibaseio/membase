@@ -53,8 +53,8 @@ PYPI_ALIASES: dict[str, tuple[str, tuple[str, ...], str]] = {
 
 # name: (link text, link)
 PYPI_PLACEHOLDERS: dict[str, tuple[str, str]] = {
-    "membase-bench": ("membase-bench", "https://github.com/unibaseio/membase-bench"),
-    "unibaseio-membase-bench": ("membase-bench", "https://github.com/unibaseio/membase-bench"),
+    "membase-bench": ("membase-bench", "https://github.com/membaseai/membase-bench"),
+    "unibaseio-membase-bench": ("membase-bench", "https://github.com/membaseai/membase-bench"),
 }
 
 NPM_ALIASES = ("membase-ai", "membase-sdk", "unibaseio-membase", "unibase-membase", "unibaseio")

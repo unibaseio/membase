@@ -23,7 +23,7 @@ profile instead of USER.md.
 ```bash
 hermes plugins install unibaseio-membase                     # once listed in the Hermes plugin catalog
 # before that, straight from the repository:
-hermes plugins install unibaseio/membase/integrations/hermes
+hermes plugins install membaseai/membase/integrations/hermes
 
 hermes memory setup unibaseio-membase                        # paste the key, pick the options below
 ```

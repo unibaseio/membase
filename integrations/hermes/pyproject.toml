@@ -14,7 +14,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://membase.com"
 Documentation = "https://docs.membase.com"
-Source = "https://github.com/unibaseio/membase/tree/main/integrations/hermes"
+Source = "https://github.com/membaseai/membase/tree/main/integrations/hermes"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

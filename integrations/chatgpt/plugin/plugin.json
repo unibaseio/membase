@@ -9,7 +9,7 @@
     "url": "https://membase.com"
   },
   "homepage": "https://membase.com",
-  "repository": "https://github.com/unibaseio/membase",
+  "repository": "https://github.com/membaseai/membase",
   "keywords": ["memory", "long-term memory", "personal knowledge", "notes", "profile"],
   "extensions": {
     "com.openai": {

@@ -54,4 +54,4 @@ the next request.
 ## Contact
 
 Privacy questions and requests: support@unibase.com.
-Source code: https://github.com/unibaseio/membase/tree/main/integrations/dify
+Source code: https://github.com/membaseai/membase/tree/main/integrations/dify

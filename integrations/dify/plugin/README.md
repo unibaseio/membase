@@ -33,7 +33,7 @@ The plugin adds three tools:
 There is no delete or forget tool. Deleting memory is done by the account owner in the
 Membase app.
 
-Source repository: https://github.com/unibaseio/membase/tree/main/integrations/dify
+Source repository: https://github.com/membaseai/membase/tree/main/integrations/dify
 
 ## Setup
 
@@ -132,4 +132,4 @@ sent, what Membase stores, and how to delete it.
 
 ## Support
 
-support@unibase.com · https://github.com/unibaseio/membase/issues
+support@unibase.com · https://github.com/membaseai/membase/issues
