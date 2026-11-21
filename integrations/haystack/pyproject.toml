@@ -34,9 +34,9 @@ local = ["unibaseio-membase[local]>=0.4.0"]
 
 [project.urls]
 Homepage = "https://membase.com"
-Documentation = "https://github.com/unibaseio/membase/tree/main/integrations/haystack#readme"
-Repository = "https://github.com/unibaseio/membase"
-Issues = "https://github.com/unibaseio/membase/issues"
+Documentation = "https://github.com/membaseai/membase/tree/main/integrations/haystack#readme"
+Repository = "https://github.com/membaseai/membase"
+Issues = "https://github.com/membaseai/membase/issues"
 
 [dependency-groups]
 dev = [

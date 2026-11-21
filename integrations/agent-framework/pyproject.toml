@@ -32,9 +32,9 @@ dependencies = [
 local = ["unibaseio-membase[local]>=0.4.0"]
 
 [project.urls]
-Homepage = "https://github.com/unibaseio/membase/tree/main/integrations/agent-framework"
-Repository = "https://github.com/unibaseio/membase"
-Issues = "https://github.com/unibaseio/membase/issues"
+Homepage = "https://github.com/membaseai/membase/tree/main/integrations/agent-framework"
+Repository = "https://github.com/membaseai/membase"
+Issues = "https://github.com/membaseai/membase/issues"
 Documentation = "https://docs.membase.com"
 
 [tool.hatch.version]

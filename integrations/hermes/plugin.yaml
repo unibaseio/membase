@@ -3,7 +3,7 @@ version: "0.3.0"
 description: "Membase hosted memory: recalls passages from the user's Membase Memories before each turn (time-boxed, fail-open) and adds membase_search, membase_save and membase_profile. One API key per profile = one person."
 author: Unibase
 license: MIT
-homepage: https://github.com/unibaseio/membase/tree/main/integrations/hermes
+homepage: https://github.com/membaseai/membase/tree/main/integrations/hermes
 tags: [memory, hosted, semantic-search]
 requires_hermes: ">=0.22.2"
 kind: exclusive  # one memory provider at a time (Hermes infers it too)

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/membase-logo.png" width="72" alt="Membase">
+  <img src="https://raw.githubusercontent.com/membaseai/membase/main/assets/membase-logo.png" width="72" alt="Membase">
 </p>
 
 <h1 align="center">Membase</h1>
@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://pypi.org/project/unibaseio-membase/"><img src="https://img.shields.io/pypi/v/unibaseio-membase?label=pypi" alt="PyPI"></a>
   <a href="https://www.npmjs.com/package/@unibaseio/membase"><img src="https://img.shields.io/npm/v/@unibaseio/membase?label=npm" alt="npm"></a>
-  <a href="https://github.com/unibaseio/membase/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
+  <a href="https://github.com/membaseai/membase/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT"></a>
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/hero.svg" width="840" alt="Add sources, manage one memory, use it from every AI and app">
+  <img src="https://raw.githubusercontent.com/membaseai/membase/main/assets/hero.svg" width="840" alt="Add sources, manage one memory, use it from every AI and app">
 </p>
 
 Membase is the memory layer for AI agents. It keeps one memory for everything you and your agents
@@ -43,16 +43,16 @@ and an MCP server. The memory lives in your Membase account, which the
 ## Write once, read from any AI
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/in-action.svg" width="840" alt="Your app writes a memory; any AI reads it, here Claude Code">
+  <img src="https://raw.githubusercontent.com/membaseai/membase/main/assets/in-action.svg" width="840" alt="Your app writes a memory; any AI reads it, here Claude Code">
 </p>
 
-Recordings: [Python SDK](https://github.com/unibaseio/membase/blob/main/assets/videos/sdk.mp4) (57 s) ·
-[Claude Code](https://github.com/unibaseio/membase/blob/main/assets/videos/switch-ai.mp4) (1 min 33 s). The answer above is illustrative.
+Recordings: [Python SDK](https://github.com/membaseai/membase/blob/main/assets/videos/sdk.mp4) (57 s) ·
+[Claude Code](https://github.com/membaseai/membase/blob/main/assets/videos/switch-ai.mp4) (1 min 33 s). The answer above is illustrative.
 
 ## Accuracy
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/results.svg" width="840" alt="LoCoMo 93.1%, LongMemEval_S 92.6%, DMR 92.2%">
+  <img src="https://raw.githubusercontent.com/membaseai/membase/main/assets/results.svg" width="840" alt="LoCoMo 93.1%, LongMemEval_S 92.6%, DMR 92.2%">
 </p>
 
 93.1% on LoCoMo, 92.6% on LongMemEval_S and 92.2% on DMR, using about 3× fewer tokens than the full
@@ -61,7 +61,7 @@ history on LoCoMo and 11× fewer on LongMemEval_S. Method and results: [membase.
 ## Quickstart
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/architecture.svg" width="840" alt="Hosted, local in process, or local over HTTP">
+  <img src="https://raw.githubusercontent.com/membaseai/membase/main/assets/architecture.svg" width="840" alt="Hosted, local in process, or local over HTTP">
 </p>
 
 ```bash
@@ -92,7 +92,7 @@ Ids are typed (`mem_…` a fact, `doc_…` a document, `med_…` a photo or vide
 Local memory answers the same routes with the same shapes.
 
 Every method, its REST route and MCP tool, and the access it needs: [SDK reference](https://docs.membase.com/build/reference/sdk-quickstart/).
-Upgrading from 0.3: see the [changelog](https://github.com/unibaseio/membase/blob/main/CHANGELOG.md).
+Upgrading from 0.3: see the [changelog](https://github.com/membaseai/membase/blob/main/CHANGELOG.md).
 The Python package is `unibaseio-membase` (import `membase`); `membase` on PyPI is unrelated.
 
 ## Command line
@@ -117,7 +117,7 @@ with several Memories writes where `MEMBASE_WRITE_TARGET` names.
 ## MCP
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/unibaseio/membase/main/assets/mcp.svg" width="840" alt="MCP clients, hosted or local server, same tools">
+  <img src="https://raw.githubusercontent.com/membaseai/membase/main/assets/mcp.svg" width="840" alt="MCP clients, hosted or local server, same tools">
 </p>
 
 ```bash
@@ -132,7 +132,7 @@ Cursor, Codex and other clients: [Connect your AI](https://docs.membase.com/conn
 Gemini CLI, as an extension (it signs you in on first use; `/mcp auth membase` signs in again):
 
 ```bash
-gemini extensions install https://github.com/unibaseio/membase
+gemini extensions install https://github.com/membaseai/membase
 ```
 
 Cline: add the server to `cline_mcp_settings.json`; [llms-install.md](llms-install.md) has the
@@ -145,9 +145,9 @@ entry, with and without a developer key.
 - [Authentication](https://docs.membase.com/build/reference/authentication/): keys and what each one can reach
 - [Connect your AI](https://docs.membase.com/connect/): per-client MCP setup
 - [Agent framework integrations](integrations/): LangChain, Microsoft Agent Framework, Dify, Hermes Agent, OpenClaw and Strands Agents
-- [Local engine](https://github.com/unibaseio/membase/blob/main/docs/reference.md): what it stores, `membase serve`, settings
+- [Local engine](https://github.com/membaseai/membase/blob/main/docs/reference.md): what it stores, `membase serve`, settings
 
 ## License
 
-MIT; see [LICENSE](https://github.com/unibaseio/membase/blob/main/LICENSE). `unibaseio-membase[local]` also
+MIT; see [LICENSE](https://github.com/membaseai/membase/blob/main/LICENSE). `unibaseio-membase[local]` also
 installs unibaseio-membase-core, the compiled engine, under its own Unibase license.
